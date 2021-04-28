@@ -2,7 +2,7 @@ name: Test - Go test
 on:
   push:
     paths:
-      - *.go
+      - '**.go'
 jobs:
   golang-test:
     name: Build

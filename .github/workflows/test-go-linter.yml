@@ -2,7 +2,7 @@ name: Test - Go linter
 on: 
   push:
     paths:
-      - *.go
+      - '**.go'
 jobs:
   golangci-lint:
     name: Lint code base
