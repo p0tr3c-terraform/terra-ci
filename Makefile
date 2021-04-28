@@ -1,11 +1,18 @@
 PROJECTNAME=$(shell basename "$(PWD)")
 
+GOLINT_VERSION="v1.34.1"
+
 MAKEFLAGS += --silent
 
 test_go_lint:
-	@docker run --rm -v $(PWD):/app -w /app golangci/golangci-lint:v1.34.1 golangci-lint run -v
+	@echo " > Running Go Lint $(GOLINT_VERSION)"
+	@docker run --rm -v $(PWD):/app -w /app golangci/golangci-lint:$(GOLINT_VERSION) golangci-lint run -v
 
-test: test_go_lint
+test_go: build
+	@echo " > Running go test"
+	@go test -v ./...
+
+test: test_go_lint test_go
 
 build:
 	@echo " > Building binary"
