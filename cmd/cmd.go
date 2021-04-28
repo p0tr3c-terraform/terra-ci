@@ -1,20 +1,11 @@
 package cmd
 
 import (
-	"errors"
 	"log"
 
 	_ "github.com/aws/aws-sdk-go/aws"
 	_ "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/spf13/cobra"
-)
-
-var (
-	ErrInvalidStatus = errors.New("non-200 status code")
-)
-
-const (
-	defaultAWSRegion = "eu-west-1"
 )
 
 func Execute() error {
