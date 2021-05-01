@@ -32,6 +32,8 @@ for asset in "${ASSET_DIR}"/*; do
     ASSETS+=("-a" "$asset")
 done
 
+RELEASE_NOTES="release-notes.md"
+
 # The hub CLI expects the first line to be the title
 echo -e "${TAG_NAME}\n" > "${RELEASE_NOTES}"
 
