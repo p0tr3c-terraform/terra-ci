@@ -35,6 +35,8 @@ var (
 		{"refresh-rate", 10, "refresh rate to fetch cloudwatch events in seconds", "duration"},
 		{"execution-input", defaultTemplate, "JSON context for state machine input", "string"},
 		{"execution-timeout", 30, "CLI execution timeout in minutes", "duration"},
+		{"branch", "main", "Branch reference to execute on", "string"},
+		{"action", "plan", "Terraform action to perform", "string"},
 	}
 )
 
@@ -43,6 +45,8 @@ const (
 {
     "Comment": "Run from CLI",
     "build": {
+	  "sourceversion": "{{ .Branch }}",
+	  "action": "{{ .Action }}",
       "environment": {
         "terra_ci_resource": "{{ .Resource }}"
       }
@@ -110,6 +114,8 @@ func randSeq(n int) string {
 
 type InputParameters struct {
 	Resource string
+	Branch   string
+	Action   string
 }
 
 type ExecutionOutput struct {
@@ -137,7 +143,7 @@ type Cloudwatch struct {
 	Client cloudwatchlogsiface.CloudWatchLogsAPI
 }
 
-func startStateMachine(sess *session.Session, stateMachineArn string) (*ExecutionOutput, error) {
+func startStateMachine(sess *session.Session, target string, stateMachineArn string, branch string) (*ExecutionOutput, error) {
 	// Client
 	sfnClient := Sfn{
 		Client: sfn.New(sess),
@@ -145,7 +151,9 @@ func startStateMachine(sess *session.Session, stateMachineArn string) (*Executio
 
 	// Template input information
 	inputParams := &InputParameters{
-		Resource: stateMachineArn,
+		Resource: target,
+		Branch:   branch,
+		Action:   cfg.GetString("action"),
 	}
 	tpl, err := template.New("executionInput").Parse(cfg.GetString("execution_input"))
 	if err != nil {
@@ -160,15 +168,15 @@ func startStateMachine(sess *session.Session, stateMachineArn string) (*Executio
 
 	// Start state machine
 	log.Printf("running terragrunt for %s", stateMachineArn)
-	log.Printf("executing %s", cfg.GetString("state_machine_arn"))
+	log.Printf("executing %s", stateMachineArn)
 	startInput := &sfn.StartExecutionInput{
 		Input:           aws.String(templatedInput.String()),
 		Name:            aws.String(fmt.Sprintf("terra-ci-runner-plan-%s", randSeq(8))),
-		StateMachineArn: aws.String(cfg.GetString("state_machine_arn")),
+		StateMachineArn: aws.String(stateMachineArn),
 	}
 	executionOutput, err := sfnClient.Client.StartExecution(startInput)
 	if err != nil {
-		log.Printf("failed to execute %s", cfg.GetString("state_machine_arn"))
+		log.Printf("failed to execute %s", stateMachineArn)
 		return nil, err
 	}
 
@@ -278,7 +286,7 @@ func rootCmdHandler(cmd *cobra.Command, args []string) error {
 	sess := session.Must(session.NewSession(&aws.Config{}))
 
 	// Start step function
-	logInformation, err := startStateMachine(sess, args[0])
+	logInformation, err := startStateMachine(sess, args[0], cfg.GetString("state_machine_arn"), cfg.GetString("branch"))
 	if err != nil {
 		return err
 	}
