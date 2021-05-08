@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	Configuration  *viper.Viper
-	ConfigFilePath = "config.yaml"
-	LogLevel       = "ERROR"
+	Configuration         *viper.Viper
+	ConfigFilePath        = "config.yaml"
+	LogLevel              = "ERROR"
+	DefaultModuleLocation = ""
 )
 
 func init() {
@@ -22,6 +23,7 @@ func init() {
 
 	// Set defaults
 	Configuration.SetDefault("log_level", LogLevel)
+	Configuration.SetDefault("default_module_location", DefaultModuleLocation)
 }
 
 func AddConfigFlags(cmd *cobra.Command) {
@@ -29,6 +31,9 @@ func AddConfigFlags(cmd *cobra.Command) {
 
 	cmd.PersistentFlags().StringVarP(&LogLevel, "log-level", "l", LogLevel, "Log level")
 	Configuration.BindPFlag("log_level", cmd.PersistentFlags().Lookup("log-level")) //nolint
+	cmd.PersistentFlags().StringVarP(&DefaultModuleLocation, "default-module-location", "m", DefaultModuleLocation, "Default location to source terragrunt modules")
+	Configuration.BindPFlag("default_module_location", cmd.PersistentFlags().Lookup("default-module-location")) //nolint
+
 }
 
 func LoadConfig(cmd *cobra.Command) error {
