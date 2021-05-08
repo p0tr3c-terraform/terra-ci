@@ -14,6 +14,7 @@ var (
 	DefaultModuleLocation      = ""
 	DefaultWorkspaceProdBranch = "main"
 	DefaultCiDirectory         = ".github/workflows/"
+	StateMachineArn            = ""
 )
 
 func init() {
@@ -28,6 +29,7 @@ func init() {
 	Configuration.SetDefault("default_module_location", DefaultModuleLocation)
 	Configuration.SetDefault("default_workspace_prod_branch", DefaultWorkspaceProdBranch)
 	Configuration.SetDefault("default_ci_directory", DefaultCiDirectory)
+	Configuration.SetDefault("state_machine_arn", StateMachineArn)
 }
 
 func AddConfigFlags(cmd *cobra.Command) {
@@ -41,7 +43,8 @@ func AddConfigFlags(cmd *cobra.Command) {
 	Configuration.BindPFlag("default_workspace_prod_branch", cmd.PersistentFlags().Lookup("default-workspace-prod-branch")) //nolint
 	cmd.PersistentFlags().StringVarP(&DefaultCiDirectory, "default-ci-directory", "d", DefaultCiDirectory, "Default direcotory for ci workflows")
 	Configuration.BindPFlag("default_ci_directory", cmd.PersistentFlags().Lookup("default-ci-directory")) //nolint
-
+	cmd.PersistentFlags().StringVarP(&StateMachineArn, "state-machine-arn", "s", StateMachineArn, "AWS state machine arn to execute terragrunt commands")
+	Configuration.BindPFlag("state_machine_arn", cmd.PersistentFlags().Lookup("state-machine-arn")) //nolint
 }
 
 func LoadConfig(cmd *cobra.Command) error {

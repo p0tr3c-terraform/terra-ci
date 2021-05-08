@@ -83,9 +83,10 @@ func NewCreateCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 
 func NewCreateWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	command := &cobra.Command{
-		Use:   "workspace",
-		Short: "Creates new terragrunt workspace",
-		Run:   runCreateWorkspace,
+		Use:     "workspace",
+		Short:   "Creates new terragrunt workspace",
+		PreRunE: validateWorkspaceConfig,
+		Run:     runCreateWorkspace,
 	}
 	SetCommandBuffers(command, in, out, outErr)
 
@@ -106,30 +107,67 @@ type WorkspaceCIConfigParameters struct {
 	WorkspaceTerragruntRunnerARN string
 }
 
+func validateWorkspaceConfig(cmd *cobra.Command, args []string) error {
+	// error early if path flag is not present
+	val, err := cmd.Flags().GetString("path")
+	if err != nil || val == "" {
+		logs.Logger.Errorw("error while accessing flag",
+			"flag", "path",
+			"error", err)
+		return UserInputError("path is required")
+	}
+
+	// error early if module location is not present
+	val, err = cmd.Flags().GetString("module-location")
+	if err != nil || val == "" {
+		defaultLocation := config.Configuration.GetString("default_module_location")
+		if defaultLocation == "" {
+			logs.Logger.Errorw("missing module location to implement",
+				"val", val,
+				"defualt", defaultLocation,
+				"error", err)
+			return UserInputError("module-location is required")
+		}
+	}
+
+	// error early if workspace directory is not present
+	val, err = cmd.Flags().GetString("workspace-ci-dir")
+	if err != nil || val == "" {
+		defaultLocation := config.Configuration.GetString("default_ci_directory")
+		if defaultLocation == "" {
+			logs.Logger.Errorw("ci directory is missing",
+				"val", val,
+				"default", defaultLocation,
+				"error", err)
+			return UserInputError("workspace-ci-dir is required")
+		}
+	}
+
+	return nil
+}
+
 func runCreateWorkspace(cmd *cobra.Command, args []string) {
 	logs.Logger.Debug("start")
 	defer logs.Logger.Debug("end")
 
 	workspacePath, err := cmd.Flags().GetString("path")
 	if err != nil {
-		logs.Logger.Error("path flag is missing")
+		logs.Logger.Errorw("error while accessing flag",
+			"flag", "path",
+			"error", err)
+		cmd.PrintErrf("path flag is required")
 		return
 	}
 
 	workspaceName := filepath.Base(workspacePath)
-	moduleLocation, _ := cmd.Flags().GetString("module-location")
-	if moduleLocation == "" {
-		if config.DefaultModuleLocation == "" {
-			logs.Logger.Error("missing module location to implement",
-				"location", moduleLocation)
-			cmd.PrintErrf("specify module-location flag or configure default module location\n")
-			return
-		}
-		moduleLocation = config.DefaultModuleLocation
+	moduleLocation, err := cmd.Flags().GetString("module-location")
+	if err != nil {
+		moduleLocation = config.Configuration.GetString("default_module_location")
 	}
+
 	// Create workspace directory
 	if err := os.MkdirAll(workspacePath, 0755); err != nil {
-		logs.Logger.Debug("failed to create workspace",
+		logs.Logger.Errorw("failed to create workspace",
 			"name", workspaceName,
 			"path", workspacePath,
 			"mode", 0755,
@@ -137,51 +175,48 @@ func runCreateWorkspace(cmd *cobra.Command, args []string) {
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
 		return
 	}
+
 	// Template workspace config
 	inputParams := &TerragruntConfigParameters{
 		ModuleLocation: moduleLocation,
 	}
 	tpl, err := template.New("terragruntConfig").Parse(terragruntWorkspaceConfig)
 	if err != nil {
-		logs.Logger.Error("failed to parse template",
+		logs.Logger.Errorw("failed to parse template",
 			"error", err)
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
 		return
 	}
 	var templatedTerragruntConfig bytes.Buffer
 	if err := tpl.Execute(&templatedTerragruntConfig, inputParams); err != nil {
-		logs.Logger.Error("failed to execute template",
+		logs.Logger.Errorw("failed to execute template",
 			"error", err)
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
 		return
 	}
 	if err := ioutil.WriteFile(filepath.Join(workspacePath, "terragrunt.hcl"),
 		templatedTerragruntConfig.Bytes(), 0644); err != nil {
-		logs.Logger.Error("failed to write terragrunt config",
+		logs.Logger.Errorw("failed to write terragrunt config",
 			"path", workspacePath,
 			"error", err)
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
 		return
 	}
+
 	// Template workspace CI
 	workspaceCiDirectory, _ := cmd.Flags().GetString("workspace-ci-dir")
 	if workspaceCiDirectory == "" {
-		if config.DefaultCiDirectory == "" {
-			logs.Logger.Error("ci directory is missing",
-				"name", workspaceName)
-			cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
-			return
-		}
-		workspaceCiDirectory = config.DefaultCiDirectory
+		workspaceCiDirectory = config.Configuration.GetString("default_ci_directory")
 	}
 	ciInputParams := &WorkspaceCIConfigParameters{
-		WorkspaceName:              workspaceName,
-		WorkspacePath:              workspacePath,
-		WorkspaceDefaultProdBranch: config.DefaultWorkspaceProdBranch,
+		WorkspaceName:                workspaceName,
+		WorkspacePath:                workspacePath,
+		WorkspaceDefaultProdBranch:   config.Configuration.GetString("default_workspace_prod_branch"),
+		WorkspaceTerragruntRunnerARN: config.Configuration.GetString("state_machine_arn"),
 	}
 	tpl, err = template.New("ciConfig").Parse(ciWorkspaceConfigTpl)
 	if err != nil {
-		logs.Logger.Error("failed to parse template",
+		logs.Logger.Errorw("failed to parse template",
 			"name", "ciWorkspaceConfigTpl",
 			"error", err)
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
@@ -189,7 +224,7 @@ func runCreateWorkspace(cmd *cobra.Command, args []string) {
 	}
 	var templatedCiConfig bytes.Buffer
 	if err := tpl.Execute(&templatedCiConfig, ciInputParams); err != nil {
-		logs.Logger.Error("failed to execute template",
+		logs.Logger.Errorw("failed to execute template",
 			"name", "ciWorkspaceConfigTpl",
 			"error", err)
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
@@ -197,7 +232,7 @@ func runCreateWorkspace(cmd *cobra.Command, args []string) {
 	}
 	if err := ioutil.WriteFile(filepath.Join(workspaceCiDirectory, fmt.Sprintf("run-%s.yml", workspaceName)),
 		templatedCiConfig.Bytes(), 0644); err != nil {
-		logs.Logger.Error("failed to write terragrunt config",
+		logs.Logger.Errorw("failed to write terragrunt config",
 			"name", "ciWorkspaceConfigTpl",
 			"path", workspaceCiDirectory,
 			"error", err)
