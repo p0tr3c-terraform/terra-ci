@@ -1,4 +1,4 @@
-package cmd
+package commands
 
 import (
 	"github.com/spf13/cobra"
@@ -29,5 +29,7 @@ func NewTerraCICommand(in io.Reader, out, outerr io.Writer) *cobra.Command {
 }
 
 func runHelp(cmd *cobra.Command, args []string) {
-	cmd.Help()
+	if err := cmd.Help(); err != nil {
+		os.Exit(1)
+	}
 }

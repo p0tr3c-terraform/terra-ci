@@ -5,14 +5,14 @@ import (
 	"os"
 	"time"
 
-	"github.com/p0tr3c/terra-ci/cmd"
+	"github.com/p0tr3c/terra-ci/commands"
 	"github.com/p0tr3c/terra-ci/logs"
 )
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
-	command := cmd.NewDefaultTerraCICommand()
+	command := commands.NewDefaultTerraCICommand()
 
 	logs.Init()
 	defer logs.Flush()
