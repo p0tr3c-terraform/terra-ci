@@ -16,6 +16,7 @@ var (
 	DefaultCiDirectory         = ".github/workflows/"
 	StateMachineArn            = ""
 	SfnExecutionTimeout        = 30
+	CiMode                     = false
 )
 
 func init() {
@@ -32,6 +33,7 @@ func init() {
 	Configuration.SetDefault("default_ci_directory", DefaultCiDirectory)
 	Configuration.SetDefault("state_machine_arn", StateMachineArn)
 	Configuration.SetDefault("sfn_execution_timeout", SfnExecutionTimeout)
+	Configuration.SetDefault("ci_mode", CiMode)
 }
 
 func AddConfigFlags(cmd *cobra.Command) {
@@ -49,6 +51,9 @@ func AddConfigFlags(cmd *cobra.Command) {
 	Configuration.BindPFlag("state_machine_arn", cmd.PersistentFlags().Lookup("state-machine-arn")) //nolint
 	cmd.PersistentFlags().IntVarP(&SfnExecutionTimeout, "sfn-execution-timeout", "t", SfnExecutionTimeout, "AWS state machine timeout in minutes. This is local timeout after which CLI will stop polling the status")
 	Configuration.BindPFlag("sfn_execution_timeout", cmd.PersistentFlags().Lookup("sfn-execution-timeout")) //nolint
+	cmd.PersistentFlags().BoolVarP(&CiMode, "ci-mode", "i", CiMode, "Determine if runs in CI. Disables spinners")
+	Configuration.BindPFlag("ci_mode", cmd.PersistentFlags().Lookup("ci-mode")) //nolint
+
 }
 
 func LoadConfig(cmd *cobra.Command) error {

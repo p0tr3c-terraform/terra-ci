@@ -246,10 +246,12 @@ func startStateMachine(cmd *cobra.Command, sess *session.Session, target, stateM
 
 	go func(ctx context.Context, outputChan chan *sfn.DescribeExecutionOutput) {
 		cmd.Printf("waiting for state machine to complete...\n")
-
+		isCiMode := config.Configuration.GetBool("ci_mode")
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
-		s.Start()
-		defer s.Stop()
+		if !isCiMode {
+			s.Start()
+			defer s.Stop()
+		}
 
 		for {
 			select {
@@ -266,7 +268,11 @@ func startStateMachine(cmd *cobra.Command, sess *session.Session, target, stateM
 				outputChan <- nil
 				return
 			}
-			s.Suffix = fmt.Sprintf("  current state: %s", *executionStatus.Status)
+			if !isCiMode {
+				s.Suffix = fmt.Sprintf("  current state: %s", *executionStatus.Status)
+			} else {
+				cmd.Printf("current state: %s", *executionStatus.Status)
+			}
 			switch *executionStatus.Status {
 			case "SUCCEEDED":
 				outputChan <- executionStatus
