@@ -85,7 +85,7 @@ func NewCreateWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Comma
 	command := &cobra.Command{
 		Use:     "workspace",
 		Short:   "Creates new terragrunt workspace",
-		PreRunE: validateWorkspaceConfig,
+		PreRunE: validateCreateWorkspaceArgs,
 		Run:     runCreateWorkspace,
 	}
 	SetCommandBuffers(command, in, out, outErr)
@@ -107,7 +107,7 @@ type WorkspaceCIConfigParameters struct {
 	WorkspaceTerragruntRunnerARN string
 }
 
-func validateWorkspaceConfig(cmd *cobra.Command, args []string) error {
+func validateCreateWorkspaceArgs(cmd *cobra.Command, args []string) error {
 	// error early if path flag is not present
 	val, err := cmd.Flags().GetString("path")
 	if err != nil || val == "" {

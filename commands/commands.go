@@ -42,7 +42,7 @@ func NewTerraCICommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	// Subcommands
 	command.AddCommand(NewCreateCommand(in, out, outErr))
 	command.AddCommand(NewConfigCommand(in, out, outErr))
-
+	command.AddCommand(NewRunCommand(in, out, outErr))
 	return command
 }
 

@@ -15,6 +15,7 @@ var (
 	DefaultWorkspaceProdBranch = "main"
 	DefaultCiDirectory         = ".github/workflows/"
 	StateMachineArn            = ""
+	SfnExecutionTimeout        = 30
 )
 
 func init() {
@@ -30,6 +31,7 @@ func init() {
 	Configuration.SetDefault("default_workspace_prod_branch", DefaultWorkspaceProdBranch)
 	Configuration.SetDefault("default_ci_directory", DefaultCiDirectory)
 	Configuration.SetDefault("state_machine_arn", StateMachineArn)
+	Configuration.SetDefault("sfn_execution_timeout", SfnExecutionTimeout)
 }
 
 func AddConfigFlags(cmd *cobra.Command) {
@@ -45,6 +47,8 @@ func AddConfigFlags(cmd *cobra.Command) {
 	Configuration.BindPFlag("default_ci_directory", cmd.PersistentFlags().Lookup("default-ci-directory")) //nolint
 	cmd.PersistentFlags().StringVarP(&StateMachineArn, "state-machine-arn", "s", StateMachineArn, "AWS state machine arn to execute terragrunt commands")
 	Configuration.BindPFlag("state_machine_arn", cmd.PersistentFlags().Lookup("state-machine-arn")) //nolint
+	cmd.PersistentFlags().IntVarP(&SfnExecutionTimeout, "sfn-execution-timeout", "t", SfnExecutionTimeout, "AWS state machine timeout in minutes. This is local timeout after which CLI will stop polling the status")
+	Configuration.BindPFlag("sfn_execution_timeout", cmd.PersistentFlags().Lookup("sfn-execution-timeout")) //nolint
 }
 
 func LoadConfig(cmd *cobra.Command) error {
