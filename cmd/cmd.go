@@ -14,15 +14,17 @@ func init() {
 }
 
 func NewDefaultTerraCICommand() *cobra.Command {
-	return NewTerraCICommand(os.Args, os.Stdin, os.Stdout, os.Stderr)
+	return NewTerraCICommand(os.Stdin, os.Stdout, os.Stderr)
 }
 
-func NewTerraCICommand(args []string, in io.Reader, out, outerr io.Writer) *cobra.Command {
+func NewTerraCICommand(in io.Reader, out, outerr io.Writer) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "terra-ci",
 		Short: "Manages and executes terragrunt remote actions",
 		Run:   runHelp,
 	}
+
+	command.AddCommand(NewCreateCommand(in, out, outerr))
 	return command
 }
 
