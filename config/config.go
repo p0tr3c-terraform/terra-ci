@@ -16,6 +16,7 @@ var (
 	DefaultCiDirectory         = ".github/workflows/"
 	StateMachineArn            = ""
 	SfnExecutionTimeout        = 30
+	RefreshRate                = 15
 	CiMode                     = false
 )
 
@@ -34,6 +35,7 @@ func init() {
 	Configuration.SetDefault("state_machine_arn", StateMachineArn)
 	Configuration.SetDefault("sfn_execution_timeout", SfnExecutionTimeout)
 	Configuration.SetDefault("ci_mode", CiMode)
+	Configuration.SetDefault("refresh_rate", RefreshRate)
 }
 
 func AddConfigFlags(cmd *cobra.Command) {
@@ -53,7 +55,8 @@ func AddConfigFlags(cmd *cobra.Command) {
 	Configuration.BindPFlag("sfn_execution_timeout", cmd.PersistentFlags().Lookup("sfn-execution-timeout")) //nolint
 	cmd.PersistentFlags().BoolVarP(&CiMode, "ci-mode", "i", CiMode, "Determine if runs in CI. Disables spinners")
 	Configuration.BindPFlag("ci_mode", cmd.PersistentFlags().Lookup("ci-mode")) //nolint
-
+	cmd.PersistentFlags().IntVarP(&RefreshRate, "refresh-rate", "r", RefreshRate, "Refresh rate of sfn execution status update")
+	Configuration.BindPFlag("refresh_rate", cmd.PersistentFlags().Lookup("refresh-rate")) //nolint
 }
 
 func LoadConfig(cmd *cobra.Command) error {
