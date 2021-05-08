@@ -14,7 +14,9 @@ func main() {
 
 	command := commands.NewDefaultTerraCICommand()
 
-	logs.Init()
+	if err := logs.Init(); err != nil {
+		os.Exit(1)
+	}
 	defer logs.Flush()
 
 	if err := command.Execute(); err != nil {
