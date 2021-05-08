@@ -19,6 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs/cloudwatchlogsiface"
 	"github.com/aws/aws-sdk-go/service/sfn"
 	"github.com/aws/aws-sdk-go/service/sfn/sfniface"
+	"github.com/briandowns/spinner"
 	"github.com/spf13/cobra"
 )
 
@@ -240,6 +241,12 @@ func startStateMachine(cmd *cobra.Command, sess *session.Session, target, stateM
 	defer cancel()
 
 	go func(ctx context.Context, outputChan chan *sfn.DescribeExecutionOutput) {
+		cmd.Printf("waiting for state machine to complete...\n")
+
+		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
+		s.Start()
+		defer s.Stop()
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -255,7 +262,7 @@ func startStateMachine(cmd *cobra.Command, sess *session.Session, target, stateM
 				outputChan <- nil
 				return
 			}
-			cmd.Printf("execution status %s\n", *executionStatus.Status)
+			s.Suffix = fmt.Sprintf("  current state: %s", *executionStatus.Status)
 			switch *executionStatus.Status {
 			case "SUCCEEDED":
 				outputChan <- executionStatus
