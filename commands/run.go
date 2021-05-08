@@ -90,13 +90,14 @@ func NewRunWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Command 
 	command := &cobra.Command{
 		Use:   "workspace",
 		Short: "Runs terragrunt workspace",
+		Args:  validateRunWorkspaceArgs,
 		Run:   runRunWorkspace,
 	}
 	SetCommandBuffers(command, in, out, outErr)
 
 	command.Flags().String("action", "plan", "Action to trigger on remote worker")
 	command.Flags().String("path", "", "Full path to the workspace")
-	command.MarkFlagRequired("path")
+	command.MarkFlagRequired("path") //nolint
 	command.Flags().String("module-location", "", "String referencing base of terragrunt module")
 	command.Flags().String("branch", "main", "Default git branch to use for deployment")
 	return command

@@ -91,7 +91,7 @@ func NewCreateWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Comma
 	SetCommandBuffers(command, in, out, outErr)
 
 	command.Flags().String("path", "", "Full path to the workspace")
-	command.MarkFlagRequired("path")
+	command.MarkFlagRequired("path") //nolint
 	command.Flags().String("module-location", "", "String referencing base of terragrunt module")
 	return command
 }
