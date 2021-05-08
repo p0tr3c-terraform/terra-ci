@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -25,6 +26,38 @@ terraform {
 include {
   path = find_in_parent_folders()
 }`
+	ciWorkspaceConfigTpl = `# Automatically generate by terra-ci
+name: Run - Terraform Plan for {{ .WorkspaceName }}
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore:
+      - {{ .WorkspaceDefaultProdBranch }}
+    paths:
+      - {{ .WorkspacePath }}
+jobs:
+  RunTerragruntPlan:
+    runs-on: ubuntu-latest
+    env:
+      TERRA_CI_STATE_MACHINE_ARN: "{{ .WorkspaceTerragruntRunnerARN }}"
+    steps:
+      - uses: actions/checkout@v2
+      - run: gh release download --pattern terra-ci-linux-amd
+        env:
+          GH_TOKEN: ${{ ` + "`{{`" + ` }} secrets.PAT {{ ` + "`}}`" + ` }}
+          GH_REPO: github.com/p0tr3c-terraform/terra-ci
+      - run: chmod +x terra-ci-linux-amd
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ ` + "`{{`" + ` }} secrets.AWS_ACCESS_KEY_ID {{ ` + "`}}`" + ` }}
+          aws-secret-access-key: ${{ ` + "`{{`" + ` }} secrets.AWS_SECRET_ACCESS_KEY {{` + "`}}`" + ` }}
+          aws-region: eu-west-1
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '1.15.2'
+      - run: terra-ci run workspace  --path={{ .WorkspacePath }} --branch=${GITHUB_REF##*/}
+`
 )
 
 type UserInputError string
@@ -66,6 +99,13 @@ type TerragruntConfigParameters struct {
 	ModuleLocation string
 }
 
+type WorkspaceCIConfigParameters struct {
+	WorkspaceName                string
+	WorkspacePath                string
+	WorkspaceDefaultProdBranch   string
+	WorkspaceTerragruntRunnerARN string
+}
+
 func runCreateWorkspace(cmd *cobra.Command, args []string) {
 	logs.Logger.Debug("start")
 	defer logs.Logger.Debug("end")
@@ -87,7 +127,6 @@ func runCreateWorkspace(cmd *cobra.Command, args []string) {
 		}
 		moduleLocation = config.DefaultModuleLocation
 	}
-
 	// Create workspace directory
 	if err := os.MkdirAll(workspacePath, 0755); err != nil {
 		logs.Logger.Debug("failed to create workspace",
@@ -125,4 +164,46 @@ func runCreateWorkspace(cmd *cobra.Command, args []string) {
 		return
 	}
 	// Template workspace CI
+	workspaceCiDirectory, _ := cmd.Flags().GetString("workspace-ci-dir")
+	if workspaceCiDirectory == "" {
+		if config.DefaultCiDirectory == "" {
+			logs.Logger.Error("ci directory is missing",
+				"name", workspaceName)
+			cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
+			return
+		}
+		workspaceCiDirectory = config.DefaultCiDirectory
+	}
+	ciInputParams := &WorkspaceCIConfigParameters{
+		WorkspaceName:              workspaceName,
+		WorkspacePath:              workspacePath,
+		WorkspaceDefaultProdBranch: config.DefaultWorkspaceProdBranch,
+	}
+	tpl, err = template.New("ciConfig").Parse(ciWorkspaceConfigTpl)
+	if err != nil {
+		logs.Logger.Error("failed to parse template",
+			"name", "ciWorkspaceConfigTpl",
+			"error", err)
+		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
+		return
+	}
+	var templatedCiConfig bytes.Buffer
+	if err := tpl.Execute(&templatedCiConfig, ciInputParams); err != nil {
+		logs.Logger.Error("failed to execute template",
+			"name", "ciWorkspaceConfigTpl",
+			"error", err)
+		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
+		return
+	}
+	if err := ioutil.WriteFile(filepath.Join(workspaceCiDirectory, fmt.Sprintf("run-%s.yml", workspaceName)),
+		templatedCiConfig.Bytes(), 0644); err != nil {
+		logs.Logger.Error("failed to write terragrunt config",
+			"name", "ciWorkspaceConfigTpl",
+			"path", workspaceCiDirectory,
+			"error", err)
+		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
+		return
+	}
+
+	cmd.Printf("workspace %s setup\n", workspaceName)
 }
