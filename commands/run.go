@@ -271,7 +271,7 @@ func startStateMachine(cmd *cobra.Command, sess *session.Session, target, stateM
 			if !isCiMode {
 				s.Suffix = fmt.Sprintf("  current state: %s", *executionStatus.Status)
 			} else {
-				cmd.Printf("current state: %s", *executionStatus.Status)
+				cmd.Printf("current state: %s\n", *executionStatus.Status)
 			}
 			switch *executionStatus.Status {
 			case "SUCCEEDED":
