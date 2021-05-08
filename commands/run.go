@@ -88,10 +88,12 @@ func NewRunCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 
 func NewRunWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	command := &cobra.Command{
-		Use:   "workspace",
-		Short: "Runs terragrunt workspace",
-		Args:  validateRunWorkspaceArgs,
-		Run:   runRunWorkspace,
+		Use:           "workspace",
+		Short:         "Runs terragrunt workspace",
+		Args:          validateRunWorkspaceArgs,
+		RunE:          runRunWorkspace,
+		SilenceErrors: true,
+		SilenceUsage:  true,
 	}
 	SetCommandBuffers(command, in, out, outErr)
 
@@ -134,14 +136,14 @@ func validateRunWorkspaceArgs(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runRunWorkspace(cmd *cobra.Command, args []string) {
+func runRunWorkspace(cmd *cobra.Command, args []string) error {
 	workspacePath, err := cmd.Flags().GetString("path")
 	if err != nil {
 		logs.Logger.Errorw("error while accessing flag",
 			"flag", "path",
 			"error", err)
 		cmd.PrintErrf("path flag is required")
-		return
+		return err
 	}
 	workspaceBranch, err := cmd.Flags().GetString("branch")
 	if err != nil {
@@ -149,7 +151,7 @@ func runRunWorkspace(cmd *cobra.Command, args []string) {
 			"flag", "branch",
 			"error", err)
 		cmd.PrintErrf("branch flag is required")
-		return
+		return err
 	}
 	workspaceAction, err := cmd.Flags().GetString("action")
 	if err != nil {
@@ -157,7 +159,7 @@ func runRunWorkspace(cmd *cobra.Command, args []string) {
 			"flag", "action",
 			"error", err)
 		cmd.PrintErrf("action flag is required")
-		return
+		return err
 	}
 
 	// Session
@@ -167,14 +169,15 @@ func runRunWorkspace(cmd *cobra.Command, args []string) {
 	logInformation, err := startStateMachine(cmd, sess, workspacePath, config.Configuration.GetString("state_machine_arn"), workspaceBranch, workspaceAction)
 	if err != nil {
 		cmd.PrintErrf("failed to start state machine")
-		return
+		return err
 	}
 
 	// Stream log content
 	if err := streamCloudwatchLogs(cmd, sess, logInformation.Build.Logs.GroupName, logInformation.Build.Logs.StreamName); err != nil {
 		cmd.PrintErrf("failed to stream logs")
-		return
+		return err
 	}
+	return nil
 }
 
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")

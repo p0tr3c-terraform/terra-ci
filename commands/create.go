@@ -83,10 +83,12 @@ func NewCreateCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 
 func NewCreateWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	command := &cobra.Command{
-		Use:     "workspace",
-		Short:   "Creates new terragrunt workspace",
-		PreRunE: validateCreateWorkspaceArgs,
-		Run:     runCreateWorkspace,
+		Use:           "workspace",
+		Short:         "Creates new terragrunt workspace",
+		PreRunE:       validateCreateWorkspaceArgs,
+		RunE:          runCreateWorkspace,
+		SilenceErrors: true,
+		SilenceUsage:  true,
 	}
 	SetCommandBuffers(command, in, out, outErr)
 
@@ -146,7 +148,7 @@ func validateCreateWorkspaceArgs(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runCreateWorkspace(cmd *cobra.Command, args []string) {
+func runCreateWorkspace(cmd *cobra.Command, args []string) error {
 	logs.Logger.Debug("start")
 	defer logs.Logger.Debug("end")
 
@@ -156,7 +158,7 @@ func runCreateWorkspace(cmd *cobra.Command, args []string) {
 			"flag", "path",
 			"error", err)
 		cmd.PrintErrf("path flag is required")
-		return
+		return err
 	}
 
 	workspaceName := filepath.Base(workspacePath)
@@ -173,7 +175,7 @@ func runCreateWorkspace(cmd *cobra.Command, args []string) {
 			"mode", 0755,
 			"error", err)
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
-		return
+		return err
 	}
 
 	// Template workspace config
@@ -185,14 +187,14 @@ func runCreateWorkspace(cmd *cobra.Command, args []string) {
 		logs.Logger.Errorw("failed to parse template",
 			"error", err)
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
-		return
+		return err
 	}
 	var templatedTerragruntConfig bytes.Buffer
 	if err := tpl.Execute(&templatedTerragruntConfig, inputParams); err != nil {
 		logs.Logger.Errorw("failed to execute template",
 			"error", err)
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
-		return
+		return err
 	}
 	if err := ioutil.WriteFile(filepath.Join(workspacePath, "terragrunt.hcl"),
 		templatedTerragruntConfig.Bytes(), 0644); err != nil {
@@ -200,7 +202,7 @@ func runCreateWorkspace(cmd *cobra.Command, args []string) {
 			"path", workspacePath,
 			"error", err)
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
-		return
+		return err
 	}
 
 	// Template workspace CI
@@ -220,7 +222,7 @@ func runCreateWorkspace(cmd *cobra.Command, args []string) {
 			"name", "ciWorkspaceConfigTpl",
 			"error", err)
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
-		return
+		return err
 	}
 	var templatedCiConfig bytes.Buffer
 	if err := tpl.Execute(&templatedCiConfig, ciInputParams); err != nil {
@@ -228,7 +230,7 @@ func runCreateWorkspace(cmd *cobra.Command, args []string) {
 			"name", "ciWorkspaceConfigTpl",
 			"error", err)
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
-		return
+		return err
 	}
 	if err := ioutil.WriteFile(filepath.Join(workspaceCiDirectory, fmt.Sprintf("run-%s.yml", workspaceName)),
 		templatedCiConfig.Bytes(), 0644); err != nil {
@@ -237,8 +239,9 @@ func runCreateWorkspace(cmd *cobra.Command, args []string) {
 			"path", workspaceCiDirectory,
 			"error", err)
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
-		return
+		return err
 	}
 
 	cmd.Printf("workspace %s setup\n", workspaceName)
+	return nil
 }
