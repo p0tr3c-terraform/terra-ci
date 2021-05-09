@@ -91,13 +91,11 @@ func ExecuteRemoteWorkspaceWithOutput(path, branch, action, arn string, refreshR
 		return err
 	}
 
-	// Start step function
 	logInformation, err := aws.GetCloudwatchLogsReference(executionStatus)
 	if err != nil {
 		return err
 	}
 
-	// Stream log content
 	if err := aws.StreamCloudwatchLogs(out, logInformation.Build.Logs.GroupName, logInformation.Build.Logs.StreamName); err != nil {
 		return err
 	}

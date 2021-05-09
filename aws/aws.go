@@ -87,7 +87,6 @@ func StartStateMachine(target, stateMachineArn, branch, action string) (string, 
 		return "", err
 	}
 
-	// Start state machine
 	startInput := &sfn.StartExecutionInput{
 		Input:           aws.String(templatedInput.String()),
 		Name:            aws.String(fmt.Sprintf("terra-ci-runner-%s-%s", action, randSeq(8))),
@@ -100,14 +99,13 @@ func StartStateMachine(target, stateMachineArn, branch, action string) (string, 
 	return *executionOutput.ExecutionArn, nil
 }
 
-func MonitorStateMachineStatus(arn string, refreshRate, executionTimeout time.Duration, ci bool, out, outErr io.Writer) (*sfn.DescribeExecutionOutput, error) {
+func MonitorStateMachineStatus(arn string, refreshRate, executionTimeout time.Duration, isCi bool, out, outErr io.Writer) (*sfn.DescribeExecutionOutput, error) {
 	sess := session.Must(session.NewSession(&aws.Config{}))
 
 	sfnClient := Sfn{
 		Client: sfn.New(sess),
 	}
 
-	// Wait for task to complete
 	describeInput := &sfn.DescribeExecutionInput{
 		ExecutionArn: aws.String(arn),
 	}
@@ -120,7 +118,7 @@ func MonitorStateMachineStatus(arn string, refreshRate, executionTimeout time.Du
 	go func(ctx context.Context, outputChan chan *sfn.DescribeExecutionOutput) {
 		fmt.Fprintf(out, "waiting for state machine to complete...\n")
 		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
-		if !ci {
+		if !isCi {
 			s.Start()
 			defer s.Stop()
 		}
@@ -140,7 +138,7 @@ func MonitorStateMachineStatus(arn string, refreshRate, executionTimeout time.Du
 				outputChan <- nil
 				return
 			}
-			if !ci {
+			if !isCi {
 				s.Suffix = fmt.Sprintf("  current state: %s", *executionStatus.Status)
 			} else {
 				fmt.Fprintf(out, "current state: %s\n", *executionStatus.Status)
