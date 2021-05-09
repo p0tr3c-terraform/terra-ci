@@ -12,6 +12,7 @@ import (
 
 	"github.com/p0tr3c/terra-ci/config"
 	"github.com/p0tr3c/terra-ci/logs"
+	"github.com/p0tr3c/terra-ci/templates"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -21,21 +22,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/sfn/sfniface"
 	"github.com/briandowns/spinner"
 	"github.com/spf13/cobra"
-)
-
-const (
-	stateMachineInputTpl = `
-{
-    "Comment": "Run from CLI",
-    "build": {
-	  "sourceversion": "{{ .Branch }}",
-	  "action": "{{ .Action }}",
-      "environment": {
-        "terra_ci_resource": "{{ .Resource }}"
-      }
-    }
-}
-`
 )
 
 type InternalError string
@@ -205,7 +191,7 @@ func startStateMachine(cmd *cobra.Command, sess *session.Session, target, stateM
 		Branch:   branch,
 		Action:   action,
 	}
-	tpl, err := template.New("executionInput").Parse(stateMachineInputTpl)
+	tpl, err := template.New("executionInput").Parse(templates.StateMachineInputTpl)
 	if err != nil {
 		logs.Logger.Errorw("failed to parse template",
 			"name", "stateMachineInputTpl",
