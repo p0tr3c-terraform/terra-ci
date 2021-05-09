@@ -1,16 +1,11 @@
 package commands
 
 import (
-	"bytes"
-	"fmt"
 	"io"
-	"io/ioutil"
 	"path/filepath"
-	"text/template"
 
 	"github.com/p0tr3c/terra-ci/config"
 	"github.com/p0tr3c/terra-ci/logs"
-	"github.com/p0tr3c/terra-ci/templates"
 	"github.com/p0tr3c/terra-ci/workspaces"
 
 	"github.com/spf13/cobra"
@@ -52,17 +47,6 @@ func NewCreateWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Comma
 	command.MarkFlagRequired("path") //nolint
 	command.Flags().String("module-location", "", "String referencing base of terragrunt module")
 	return command
-}
-
-type TerragruntConfigParameters struct {
-	ModuleLocation string
-}
-
-type WorkspaceCIConfigParameters struct {
-	WorkspaceName                string
-	WorkspacePath                string
-	WorkspaceDefaultProdBranch   string
-	WorkspaceTerragruntRunnerARN string
 }
 
 func validateCreateWorkspaceArgs(cmd *cobra.Command, args []string) error {
@@ -123,6 +107,14 @@ func runCreateWorkspace(cmd *cobra.Command, args []string) error {
 		moduleLocation = config.Configuration.GetString("default_module_location")
 	}
 
+	workspaceCiDirectory, _ := cmd.Flags().GetString("workspace-ci-dir")
+	if workspaceCiDirectory == "" {
+		workspaceCiDirectory = config.Configuration.GetString("default_ci_directory")
+	}
+
+	workspaceBranch := config.Configuration.GetString("default_workspace_prod_branch")
+	workspaceArn := config.Configuration.GetString("state_machine_arn")
+
 	if err := workspaces.CreateWorkspaceDirecotry(workspaceName, workspacePath); err != nil {
 		logs.Logger.Errorw("failed to create workspace",
 			"name", workspaceName,
@@ -132,65 +124,21 @@ func runCreateWorkspace(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Template workspace config
-	inputParams := &TerragruntConfigParameters{
-		ModuleLocation: moduleLocation,
-	}
-	tpl, err := template.New("terragruntConfig").Parse(templates.TerragruntWorkspaceConfig)
-	if err != nil {
+	if err := workspaces.CreateWorkspaceConfig(workspacePath, moduleLocation); err != nil {
 		logs.Logger.Errorw("failed to parse template",
-			"error", err)
-		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
-		return err
-	}
-	var templatedTerragruntConfig bytes.Buffer
-	if err := tpl.Execute(&templatedTerragruntConfig, inputParams); err != nil {
-		logs.Logger.Errorw("failed to execute template",
-			"error", err)
-		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
-		return err
-	}
-	if err := ioutil.WriteFile(filepath.Join(workspacePath, "terragrunt.hcl"),
-		templatedTerragruntConfig.Bytes(), 0644); err != nil {
-		logs.Logger.Errorw("failed to write terragrunt config",
 			"path", workspacePath,
 			"error", err)
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
 		return err
 	}
 
-	// Template workspace CI
-	workspaceCiDirectory, _ := cmd.Flags().GetString("workspace-ci-dir")
-	if workspaceCiDirectory == "" {
-		workspaceCiDirectory = config.Configuration.GetString("default_ci_directory")
-	}
-	ciInputParams := &WorkspaceCIConfigParameters{
-		WorkspaceName:                workspaceName,
-		WorkspacePath:                workspacePath,
-		WorkspaceDefaultProdBranch:   config.Configuration.GetString("default_workspace_prod_branch"),
-		WorkspaceTerragruntRunnerARN: config.Configuration.GetString("state_machine_arn"),
-	}
-	tpl, err = template.New("ciConfig").Parse(templates.CiWorkspaceConfigTpl)
-	if err != nil {
+	if err := workspaces.CreateWorkspaceCI(workspaceName, workspacePath, workspaceBranch, workspaceArn, workspaceCiDirectory); err != nil {
 		logs.Logger.Errorw("failed to parse template",
-			"name", "ciWorkspaceConfigTpl",
-			"error", err)
-		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
-		return err
-	}
-	var templatedCiConfig bytes.Buffer
-	if err := tpl.Execute(&templatedCiConfig, ciInputParams); err != nil {
-		logs.Logger.Errorw("failed to execute template",
-			"name", "ciWorkspaceConfigTpl",
-			"error", err)
-		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
-		return err
-	}
-	if err := ioutil.WriteFile(filepath.Join(workspaceCiDirectory, fmt.Sprintf("run-%s.yml", workspaceName)),
-		templatedCiConfig.Bytes(), 0644); err != nil {
-		logs.Logger.Errorw("failed to write terragrunt config",
-			"name", "ciWorkspaceConfigTpl",
-			"path", workspaceCiDirectory,
+			"name", workspaceName,
+			"path", workspacePath,
+			"branch", workspaceBranch,
+			"arn", workspaceArn,
+			"ci", workspaceCiDirectory,
 			"error", err)
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
 		return err
