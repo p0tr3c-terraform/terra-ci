@@ -3,12 +3,15 @@ package workspaces
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"text/template"
+	"time"
 
+	"github.com/p0tr3c/terra-ci/aws"
 	"github.com/p0tr3c/terra-ci/templates"
 )
 
@@ -72,6 +75,30 @@ func CreateWorkspaceCI(name, workspacePath, branch, arn, ciPath string) error {
 	}
 	if err := ioutil.WriteFile(filepath.Join(ciPath, fmt.Sprintf("%s.yml", strings.ReplaceAll(workspacePath, "/", "_"))),
 		templatedCiConfig.Bytes(), defaultFilePermMode); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ExecuteRemoteWorkspaceWithOutput(path, branch, action, arn string, refreshRate, executionTimeout time.Duration, isCi bool, out, outErr io.Writer) error {
+	executionArn, err := aws.StartStateMachine(path, arn, branch, action)
+	if err != nil {
+		return err
+	}
+
+	executionStatus, err := aws.MonitorStateMachineStatus(executionArn, refreshRate, executionTimeout, isCi, out, outErr)
+	if err != nil {
+		return err
+	}
+
+	// Start step function
+	logInformation, err := aws.GetCloudwatchLogsReference(executionStatus)
+	if err != nil {
+		return err
+	}
+
+	// Stream log content
+	if err := aws.StreamCloudwatchLogs(out, logInformation.Build.Logs.GroupName, logInformation.Build.Logs.StreamName); err != nil {
 		return err
 	}
 	return nil
