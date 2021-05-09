@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/p0tr3c/terra-ci/config"
+	"github.com/p0tr3c/terra-ci/fflags"
 	"github.com/p0tr3c/terra-ci/logs"
 
 	"github.com/spf13/cobra"
@@ -43,6 +44,9 @@ func NewTerraCICommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	command.AddCommand(NewCreateCommand(in, out, outErr))
 	command.AddCommand(NewConfigCommand(in, out, outErr))
 	command.AddCommand(NewRunCommand(in, out, outErr))
+	if fflags.IsPlanSplitEnabled() {
+		command.AddCommand(NewPlanCommand(in, out, outErr))
+	}
 	return command
 }
 

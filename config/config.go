@@ -18,6 +18,7 @@ var (
 	SfnExecutionTimeout        = 30
 	RefreshRate                = 15
 	CiMode                     = false
+	ExperimentalFlow           = false
 )
 
 func init() {
@@ -36,6 +37,7 @@ func init() {
 	Configuration.SetDefault("sfn_execution_timeout", SfnExecutionTimeout)
 	Configuration.SetDefault("ci_mode", CiMode)
 	Configuration.SetDefault("refresh_rate", RefreshRate)
+	Configuration.SetDefault("experimental_flow", ExperimentalFlow)
 }
 
 func AddConfigFlags(cmd *cobra.Command) {
@@ -57,6 +59,8 @@ func AddConfigFlags(cmd *cobra.Command) {
 	Configuration.BindPFlag("ci_mode", cmd.PersistentFlags().Lookup("ci-mode")) //nolint
 	cmd.PersistentFlags().IntVarP(&RefreshRate, "refresh-rate", "r", RefreshRate, "Refresh rate of sfn execution status update")
 	Configuration.BindPFlag("refresh_rate", cmd.PersistentFlags().Lookup("refresh-rate")) //nolint
+	cmd.PersistentFlags().BoolVarP(&ExperimentalFlow, "experimental-flow", "e", ExperimentalFlow, "Use experimental code flow. Assume broken")
+	Configuration.BindPFlag("experimental_flow", cmd.PersistentFlags().Lookup("experimental-flow")) //nolint
 }
 
 func LoadConfig(cmd *cobra.Command) error {
