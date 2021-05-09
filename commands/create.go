@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"os"
 	"path/filepath"
 	"text/template"
 
 	"github.com/p0tr3c/terra-ci/config"
 	"github.com/p0tr3c/terra-ci/logs"
 	"github.com/p0tr3c/terra-ci/templates"
+	"github.com/p0tr3c/terra-ci/workspaces"
 
 	"github.com/spf13/cobra"
 )
@@ -123,12 +123,10 @@ func runCreateWorkspace(cmd *cobra.Command, args []string) error {
 		moduleLocation = config.Configuration.GetString("default_module_location")
 	}
 
-	// Create workspace directory
-	if err := os.MkdirAll(workspacePath, 0755); err != nil {
+	if err := workspaces.CreateWorkspaceDirecotry(workspaceName, workspacePath); err != nil {
 		logs.Logger.Errorw("failed to create workspace",
 			"name", workspaceName,
 			"path", workspacePath,
-			"mode", 0755,
 			"error", err)
 		cmd.PrintErrf("failed to create workspace %s\n", workspaceName)
 		return err
