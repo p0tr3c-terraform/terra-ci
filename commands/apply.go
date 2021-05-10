@@ -10,45 +10,39 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewPlanCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
+func NewApplyCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	command := &cobra.Command{
-		Use:   "plan",
-		Short: "Plan terragrunt resources",
+		Use:   "apply",
+		Short: "Apply terragrunt resources",
 		Run:   runHelp,
 	}
 	SetCommandBuffers(command, in, out, outErr)
-	command.AddCommand(NewPlanWorkspaceCommand(in, out, outErr))
+	command.AddCommand(NewApplyWorkspaceCommand(in, out, outErr))
 	return command
 }
 
-func NewPlanWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
+func NewApplyWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "workspace",
-		Short: "Plan terragrunt workspace",
-		RunE:  runPlanWorkspaceCommand,
+		Short: "Apply terragrunt workspace",
+		RunE:  runApplyWorkspaceCommand,
 	}
 	SetCommandBuffers(command, in, out, outErr)
 
 	command.Flags().String("path", "", "Full path to the workspace")
 	command.MarkFlagRequired("path") //nolint
-	command.Flags().String("branch", "main", "Branch to run plan on")
 	return command
 }
 
-func getPlanFlagValues(cmd *cobra.Command, args []string) (*workspaces.WorkspaceExecutionInput, error) {
+func getApplyFlagValues(cmd *cobra.Command, args []string) (*workspaces.WorkspaceExecutionInput, error) {
 	workspacePath, err := cmd.Flags().GetString("path")
-	if err != nil {
-		return nil, err
-	}
-	workspaceBranch, err := cmd.Flags().GetString("branch")
 	if err != nil {
 		return nil, err
 	}
 	input := &workspaces.WorkspaceExecutionInput{
 		Path:             workspacePath,
-		Branch:           workspaceBranch,
-		Action:           "plan",
-		Arn:              config.Configuration.GetString("plan_sfn_arn"),
+		Action:           "apply",
+		Arn:              config.Configuration.GetString("apply_sfn_arn"),
 		ExecutionTimeout: config.Configuration.GetDuration("sfn_execution_timeout"),
 		RefreshRate:      config.Configuration.GetDuration("refresh_rate"),
 		IsCi:             config.Configuration.GetBool("ci_mode"),
@@ -56,8 +50,8 @@ func getPlanFlagValues(cmd *cobra.Command, args []string) (*workspaces.Workspace
 	return input, nil
 }
 
-func runPlanWorkspaceCommand(cmd *cobra.Command, args []string) error {
-	executionInput, err := getPlanFlagValues(cmd, args)
+func runApplyWorkspaceCommand(cmd *cobra.Command, args []string) error {
+	executionInput, err := getApplyFlagValues(cmd, args)
 	if err != nil {
 		logs.Logger.Errorw("error while accessing flags",
 			"error", err)

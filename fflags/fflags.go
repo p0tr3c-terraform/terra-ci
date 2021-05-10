@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	flagPrefix = "TERRA_CI_FLAG_"
+	flagPrefix = "TERRA_CI_FLAG"
 )
 
 var (
@@ -16,10 +16,14 @@ var (
 )
 
 func IsPlanSplitEnabled() bool {
-	return IsEnabled(fmt.Sprintf("%sPLAN_SPLIT", flagPrefix))
+	return IsEnabled("PLAN_SPLIT")
 }
 
 func IsEnabled(flag string) bool {
-	ff := os.Getenv(flag)
-	return ff != ""
+	ffe := os.Getenv(fmt.Sprintf("%s_%s", flagPrefix, flag))
+	if ff, ok := flags[flag]; !ok {
+		return false
+	} else {
+		return ffe != "" || ff
+	}
 }

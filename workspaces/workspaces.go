@@ -80,6 +80,16 @@ func CreateWorkspaceCI(name, workspacePath, branch, arn, ciPath string) error {
 	return nil
 }
 
+type WorkspaceExecutionInput struct {
+	Path             string
+	Branch           string
+	Action           string
+	Arn              string
+	ExecutionTimeout time.Duration
+	RefreshRate      time.Duration
+	IsCi             bool
+}
+
 func ExecuteRemoteWorkspaceWithOutput(path, branch, action, arn string, refreshRate, executionTimeout time.Duration, isCi bool, out, outErr io.Writer) error {
 	executionArn, err := aws.StartStateMachine(path, arn, branch, action)
 	if err != nil {
@@ -87,6 +97,34 @@ func ExecuteRemoteWorkspaceWithOutput(path, branch, action, arn string, refreshR
 	}
 
 	executionStatus, err := aws.MonitorStateMachineStatus(executionArn, refreshRate, executionTimeout, isCi, out, outErr)
+	if err != nil {
+		return err
+	}
+
+	logInformation, err := aws.GetCloudwatchLogsReference(executionStatus)
+	if err != nil {
+		return err
+	}
+
+	if err := aws.StreamCloudwatchLogs(out, logInformation.Build.Logs.GroupName, logInformation.Build.Logs.StreamName); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ExecuteRemoteWorkspaceWithOutputNew(executionInput *WorkspaceExecutionInput, out, outErr io.Writer) error {
+	executionArn, err := aws.StartStateMachine(executionInput.Path,
+		executionInput.Arn,
+		executionInput.Branch,
+		executionInput.Action)
+	if err != nil {
+		return err
+	}
+
+	executionStatus, err := aws.MonitorStateMachineStatus(executionArn,
+		executionInput.RefreshRate,
+		executionInput.ExecutionTimeout,
+		executionInput.IsCi, out, outErr)
 	if err != nil {
 		return err
 	}
