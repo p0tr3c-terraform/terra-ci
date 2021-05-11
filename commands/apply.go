@@ -59,7 +59,7 @@ func runApplyWorkspaceCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := workspaces.ExecuteRemoteWorkspaceWithOutputNew(executionInput, cmd.OutOrStdout(), cmd.OutOrStderr()); err != nil {
+	if err := workspaces.ExecuteRemoteWorkspaceWithOutput(executionInput, cmd.OutOrStdout(), cmd.OutOrStderr()); err != nil {
 		logs.Logger.Errorw("failed to execute workspace",
 			"executionInput", executionInput,
 			"error", err)
