@@ -167,13 +167,17 @@ type ExecutionEventHistory struct {
 
 func (e *ExecutionEventHistory) AddEvent(event *sfn.HistoryEvent) {
 	e.Events[*event.Id] = event
-	e.LastEventId = *event.Id
+	if *event.Id > e.LastEventId {
+		e.LastEventId = *event.Id
+	}
 }
 
 func returnExecutionStatus(events *ExecutionEventHistory) error {
-	completionStatus := *events.Events[events.LastEventId].Type
-	if completionStatus != "ExecutionSucceeded" {
-		return fmt.Errorf("execution completed with %s status", completionStatus)
+	if len(events.Events) > 0 {
+		completionStatus := *events.Events[events.LastEventId].Type
+		if completionStatus != "ExecutionSucceeded" {
+			return fmt.Errorf("execution completed with %s status", completionStatus)
+		}
 	}
 	return nil
 }
@@ -212,7 +216,6 @@ func MonitorStateMachineStatus(arn string, refreshRate, executionTimeout time.Du
 			if completed {
 				break
 			}
-
 			select {
 			case <-ctx.Done():
 				return
