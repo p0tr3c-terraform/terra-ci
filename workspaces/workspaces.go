@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -88,6 +89,8 @@ type WorkspaceExecutionInput struct {
 	ExecutionTimeout time.Duration
 	RefreshRate      time.Duration
 	IsCi             bool
+	Local            bool
+	LocalModules     string
 }
 
 func ExecuteRemoteWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, out, outErr io.Writer) error {
@@ -107,6 +110,55 @@ func ExecuteRemoteWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, o
 		executionInput.IsCi, out, outErr)
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func ExecuteLocalWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, in io.Reader, out, outErr io.Writer) error {
+	defaultPlanFileName := "tfplan"
+	defaultTerragruntBinName := "terragrunt"
+	localModulesAbsPath, err := filepath.Abs(executionInput.LocalModules)
+	if err != nil {
+		return err
+	}
+	localModules := fmt.Sprintf("%s//%s", localModulesAbsPath, filepath.Base(executionInput.Path))
+	shellCommandArgs := []string{
+		"plan",
+		"-out",
+		defaultPlanFileName,
+		"--terragrunt-source",
+		localModules,
+	}
+	shellCommand := exec.Command(defaultTerragruntBinName, shellCommandArgs...)
+	workspaceAbsPath, err := filepath.Abs(executionInput.Path)
+	if err != nil {
+		return err
+	}
+	shellCommand.Dir = workspaceAbsPath
+	shellCommand.Stdin = in
+	shellCommand.Stdout = out
+	shellCommand.Stderr = outErr
+
+	if err := shellCommand.Start(); err != nil {
+		return err
+	}
+
+	if err := shellCommand.Wait(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ExecuteWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, in io.Reader, out, outErr io.Writer) error {
+	if executionInput.Local {
+		if err := ExecuteLocalWorkspaceWithOutput(executionInput, in, out, outErr); err != nil {
+			return err
+		}
+	} else {
+		if err := ExecuteRemoteWorkspaceWithOutput(executionInput, out, outErr); err != nil {
+			return err
+		}
 	}
 	return nil
 }

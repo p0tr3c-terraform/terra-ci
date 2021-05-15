@@ -32,10 +32,12 @@ func NewPlanWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Command
 	command.Flags().String("path", "", "Full path to the workspace")
 	command.MarkFlagRequired("path") //nolint
 	command.Flags().String("branch", "main", "Branch to run plan on")
+	command.Flags().Bool("local", false, "Run plan locally")
+	command.Flags().String("modules", "./modules//", "Full path to local modules")
 	return command
 }
 
-func getPlanFlagValues(cmd *cobra.Command, args []string) (*workspaces.WorkspaceExecutionInput, error) {
+func getExecutionInput(cmd *cobra.Command, args []string) (*workspaces.WorkspaceExecutionInput, error) {
 	workspacePath, err := cmd.Flags().GetString("path")
 	if err != nil {
 		return nil, err
@@ -44,6 +46,15 @@ func getPlanFlagValues(cmd *cobra.Command, args []string) (*workspaces.Workspace
 	if err != nil {
 		return nil, err
 	}
+	local, err := cmd.Flags().GetBool("local")
+	if err != nil {
+		return nil, err
+	}
+	localModules, err := cmd.Flags().GetString("modules")
+	if err != nil {
+		return nil, err
+	}
+
 	input := &workspaces.WorkspaceExecutionInput{
 		Path:             workspacePath,
 		Branch:           workspaceBranch,
@@ -52,12 +63,14 @@ func getPlanFlagValues(cmd *cobra.Command, args []string) (*workspaces.Workspace
 		ExecutionTimeout: config.Configuration.GetDuration("sfn_execution_timeout"),
 		RefreshRate:      config.Configuration.GetDuration("refresh_rate"),
 		IsCi:             config.Configuration.GetBool("ci_mode"),
+		Local:            local,
+		LocalModules:     localModules,
 	}
 	return input, nil
 }
 
 func runPlanWorkspaceCommand(cmd *cobra.Command, args []string) error {
-	executionInput, err := getPlanFlagValues(cmd, args)
+	executionInput, err := getExecutionInput(cmd, args)
 	if err != nil {
 		logs.Logger.Errorw("error while accessing flags",
 			"error", err)
@@ -65,7 +78,7 @@ func runPlanWorkspaceCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := workspaces.ExecuteRemoteWorkspaceWithOutput(executionInput, cmd.OutOrStdout(), cmd.OutOrStderr()); err != nil {
+	if err := workspaces.ExecuteWorkspaceWithOutput(executionInput, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.OutOrStderr()); err != nil {
 		logs.Logger.Errorw("failed to execute workspace",
 			"executionInput", executionInput,
 			"error", err)
