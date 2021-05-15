@@ -8,7 +8,6 @@ import (
 	"io"
 	"math/rand"
 	"regexp"
-	"sync"
 	"text/template"
 	"time"
 
@@ -20,7 +19,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs/cloudwatchlogsiface"
 	"github.com/aws/aws-sdk-go/service/sfn"
 	"github.com/aws/aws-sdk-go/service/sfn/sfniface"
-	_ "github.com/briandowns/spinner"
 )
 
 var (
@@ -182,10 +180,14 @@ func returnExecutionStatus(events *ExecutionEventHistory) error {
 	return nil
 }
 
+type ExecutionMonitorExitDetails struct {
+	Type   string
+	Error  error
+	Output string
+}
+
 func MonitorStateMachineStatus(arn string, refreshRate, executionTimeout time.Duration, isCi bool, out, outErr io.Writer) error {
 	sess := session.Must(session.NewSession(&aws.Config{}))
-	var wg sync.WaitGroup
-
 	sfnClient := Sfn{
 		Client: sfn.New(sess),
 	}
@@ -194,13 +196,12 @@ func MonitorStateMachineStatus(arn string, refreshRate, executionTimeout time.Du
 	ctx, cancel := context.WithDeadline(context.Background(), d)
 	defer cancel()
 
-	wg.Add(1)
 	// Process state machine events
 	events := &ExecutionEventHistory{
 		Events: make(map[int64]*sfn.HistoryEvent),
 	}
-	go func(ctx context.Context) {
-		defer wg.Done()
+	monitorExitStatus := make(chan *ExecutionMonitorExitDetails)
+	go func(ctx context.Context, exitStatus chan *ExecutionMonitorExitDetails) {
 		completed := false
 		fmt.Fprintf(out, "monitoring execution of %s\n", arn)
 		executionEventInput := &sfn.GetExecutionHistoryInput{
@@ -209,6 +210,9 @@ func MonitorStateMachineStatus(arn string, refreshRate, executionTimeout time.Du
 		for {
 			executionEvents, err := sfnClient.Client.GetExecutionHistory(executionEventInput)
 			if err != nil {
+				exitStatus <- &ExecutionMonitorExitDetails{
+					Error: err,
+				}
 				return
 			}
 			events, completed = processEvents(events, executionEvents, out)
@@ -218,16 +222,22 @@ func MonitorStateMachineStatus(arn string, refreshRate, executionTimeout time.Du
 			}
 			select {
 			case <-ctx.Done():
-				fmt.Fprintf(out, "cli execution timed out\n")
+				exitStatus <- &ExecutionMonitorExitDetails{
+					Error: fmt.Errorf("cli execution timed out"),
+				}
 				return
 			default:
 				time.Sleep(time.Second * refreshRate)
 			}
 		}
 		fmt.Fprintf(out, "execution of state machine completed\n")
-	}(ctx)
+		exitStatus <- &ExecutionMonitorExitDetails{}
+	}(ctx, monitorExitStatus)
 
-	wg.Wait()
+	exitStatus := <-monitorExitStatus
+	if exitStatus.Error != nil {
+		return exitStatus.Error
+	}
 	return returnExecutionStatus(events)
 }
 
