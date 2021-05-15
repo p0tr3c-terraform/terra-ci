@@ -31,11 +31,21 @@ func NewApplyWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Comman
 
 	command.Flags().String("path", "", "Full path to the workspace")
 	command.MarkFlagRequired("path") //nolint
+	command.Flags().Bool("local", false, "Run apply locally")
+	command.Flags().String("modules", "./modules//", "Full path to local modules")
 	return command
 }
 
-func getApplyFlagValues(cmd *cobra.Command, args []string) (*workspaces.WorkspaceExecutionInput, error) {
+func getApplyExecutionInput(cmd *cobra.Command, args []string) (*workspaces.WorkspaceExecutionInput, error) {
 	workspacePath, err := cmd.Flags().GetString("path")
+	if err != nil {
+		return nil, err
+	}
+	local, err := cmd.Flags().GetBool("local")
+	if err != nil {
+		return nil, err
+	}
+	localModules, err := cmd.Flags().GetString("modules")
 	if err != nil {
 		return nil, err
 	}
@@ -46,12 +56,14 @@ func getApplyFlagValues(cmd *cobra.Command, args []string) (*workspaces.Workspac
 		ExecutionTimeout: config.Configuration.GetDuration("sfn_execution_timeout"),
 		RefreshRate:      config.Configuration.GetDuration("refresh_rate"),
 		IsCi:             config.Configuration.GetBool("ci_mode"),
+		Local:            local,
+		LocalModules:     localModules,
 	}
 	return input, nil
 }
 
 func runApplyWorkspaceCommand(cmd *cobra.Command, args []string) error {
-	executionInput, err := getApplyFlagValues(cmd, args)
+	executionInput, err := getApplyExecutionInput(cmd, args)
 	if err != nil {
 		logs.Logger.Errorw("error while accessing flags",
 			"error", err)
@@ -59,7 +71,7 @@ func runApplyWorkspaceCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := workspaces.ExecuteRemoteWorkspaceWithOutput(executionInput, cmd.OutOrStdout(), cmd.OutOrStderr()); err != nil {
+	if err := workspaces.ExecuteWorkspaceWithOutput(executionInput, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.OutOrStderr()); err != nil {
 		logs.Logger.Errorw("failed to execute workspace",
 			"executionInput", executionInput,
 			"error", err)

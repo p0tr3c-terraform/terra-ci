@@ -37,7 +37,7 @@ func NewPlanWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Command
 	return command
 }
 
-func getExecutionInput(cmd *cobra.Command, args []string) (*workspaces.WorkspaceExecutionInput, error) {
+func getPlanExecutionInput(cmd *cobra.Command, args []string) (*workspaces.WorkspaceExecutionInput, error) {
 	workspacePath, err := cmd.Flags().GetString("path")
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func getExecutionInput(cmd *cobra.Command, args []string) (*workspaces.Workspace
 }
 
 func runPlanWorkspaceCommand(cmd *cobra.Command, args []string) error {
-	executionInput, err := getExecutionInput(cmd, args)
+	executionInput, err := getPlanExecutionInput(cmd, args)
 	if err != nil {
 		logs.Logger.Errorw("error while accessing flags",
 			"error", err)

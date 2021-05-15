@@ -123,12 +123,18 @@ func ExecuteLocalWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, in
 	}
 	localModules := fmt.Sprintf("%s//%s", localModulesAbsPath, filepath.Base(executionInput.Path))
 	shellCommandArgs := []string{
-		"plan",
-		"-out",
-		defaultPlanFileName,
+		executionInput.Action,
+	}
+	if executionInput.Action == "plan" {
+		shellCommandArgs = append(shellCommandArgs, []string{
+			"-out",
+			defaultPlanFileName,
+		}...)
+	}
+	shellCommandArgs = append(shellCommandArgs, []string{
 		"--terragrunt-source",
 		localModules,
-	}
+	}...)
 	shellCommand := exec.Command(defaultTerragruntBinName, shellCommandArgs...)
 	workspaceAbsPath, err := filepath.Abs(executionInput.Path)
 	if err != nil {
