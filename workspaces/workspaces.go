@@ -82,6 +82,8 @@ func CreateWorkspaceCI(name, workspacePath, branch, arn, ciPath string) error {
 }
 
 type WorkspaceExecutionInput struct {
+	DestroyPlan      bool
+	OutPlan          string
 	Path             string
 	Branch           string
 	Action           string

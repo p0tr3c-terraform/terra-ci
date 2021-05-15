@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/p0tr3c/terra-ci/config"
@@ -21,11 +22,27 @@ func NewWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	command.MarkFlagRequired("path") //nolint
 
 	command.PersistentFlags().Bool("local", false, "Run action with localy")
-	command.PersistentFlags().String("modules", "./modules//", "Full path to local modules")
+	command.PersistentFlags().String("source", "./modules//", "Full path to local modules")
 
 	command.AddCommand(NewWorkspacePlanCommand(in, out, outErr))
 	command.AddCommand(NewWorkspaceApplyCommand(in, out, outErr))
 	return command
+}
+
+func getOutPlan(cmd *cobra.Command, args []string) (string, error) {
+	var outPlan string
+	var err error
+	switch cmd.Use {
+	case "plan":
+		outPlan, err = cmd.Flags().GetString("out")
+	case "apply":
+		if len(args) == 1 {
+			outPlan = args[0]
+		}
+	default:
+		err = fmt.Errorf("unsupported command %s", cmd.Use)
+	}
+	return outPlan, err
 }
 
 func getExecutionInput(cmd *cobra.Command, args []string) (*workspaces.WorkspaceExecutionInput, error) {
@@ -41,12 +58,27 @@ func getExecutionInput(cmd *cobra.Command, args []string) (*workspaces.Workspace
 	if err != nil {
 		return nil, err
 	}
-	localModules, err := cmd.Flags().GetString("modules")
+	localModules, err := cmd.Flags().GetString("source")
 	if err != nil {
 		return nil, err
 	}
 
+	outPlan, err := getOutPlan(cmd, args)
+	if err != nil {
+		return nil, err
+	}
+
+	destroy := false
+	if cmd.Use == "plan" {
+		destroy, err = cmd.Flags().GetBool("destroy")
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	input := &workspaces.WorkspaceExecutionInput{
+		DestroyPlan:      destroy,
+		OutPlan:          outPlan,
 		Path:             workspacePath,
 		Branch:           workspaceBranch,
 		Arn:              config.Configuration.GetString("plan_sfn_arn"),
@@ -56,6 +88,7 @@ func getExecutionInput(cmd *cobra.Command, args []string) (*workspaces.Workspace
 		Local:            local,
 		LocalModules:     localModules,
 	}
+
 	return input, nil
 }
 
@@ -69,6 +102,8 @@ func NewWorkspacePlanCommand(in io.Reader, out, outErr io.Writer) *cobra.Command
 	}
 	SetCommandBuffers(command, in, out, outErr)
 	command.Flags().String("branch", "main", "Branch to execute workspace action")
+	command.Flags().String("out", "", "Name of plan file to generate")
+	command.Flags().Bool("destroy", false, "Generate destroy plan")
 	return command
 }
 
