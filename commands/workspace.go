@@ -22,7 +22,7 @@ func NewWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	command.MarkFlagRequired("path") //nolint
 
 	command.PersistentFlags().Bool("local", false, "Run action with localy")
-	command.PersistentFlags().String("source", "./modules//", "Full path to local modules")
+	command.PersistentFlags().String("source", "", "Full path to local modules")
 
 	command.AddCommand(NewWorkspacePlanCommand(in, out, outErr))
 	command.AddCommand(NewWorkspaceApplyCommand(in, out, outErr))

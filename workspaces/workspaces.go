@@ -117,27 +117,33 @@ func ExecuteRemoteWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, o
 }
 
 func ExecuteLocalWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, in io.Reader, out, outErr io.Writer) error {
-	defaultPlanFileName := "tfplan"
-	defaultTerragruntBinName := "terragrunt"
-	localModulesAbsPath, err := filepath.Abs(executionInput.LocalModules)
-	if err != nil {
-		return err
-	}
-	localModules := fmt.Sprintf("%s//%s", localModulesAbsPath, filepath.Base(executionInput.Path))
 	shellCommandArgs := []string{
 		executionInput.Action,
 	}
-	if executionInput.Action == "plan" {
+	if executionInput.OutPlan != "" {
+		switch executionInput.Action {
+		case "plan":
+			shellCommandArgs = append(shellCommandArgs, []string{
+				"-out",
+				executionInput.OutPlan,
+			}...)
+		case "apply":
+			shellCommandArgs = append(shellCommandArgs, []string{
+				executionInput.OutPlan,
+			}...)
+		}
+	}
+	if executionInput.DestroyPlan {
+		shellCommandArgs = append(shellCommandArgs, "-destroy")
+	}
+	if executionInput.LocalModules != "" {
 		shellCommandArgs = append(shellCommandArgs, []string{
-			"-out",
-			defaultPlanFileName,
+			"--terragrunt-source",
+			executionInput.LocalModules,
 		}...)
 	}
-	shellCommandArgs = append(shellCommandArgs, []string{
-		"--terragrunt-source",
-		localModules,
-	}...)
-	shellCommand := exec.Command(defaultTerragruntBinName, shellCommandArgs...)
+	fmt.Fprintf(out, "%v\n", shellCommandArgs)
+	shellCommand := exec.Command("terragrunt", shellCommandArgs...)
 	workspaceAbsPath, err := filepath.Abs(executionInput.Path)
 	if err != nil {
 		return err
