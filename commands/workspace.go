@@ -11,6 +11,50 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	workspaceFlags = WorkspaceFlags{
+		Flags: []string{
+			"path",
+			"local",
+			"source",
+			"branch",
+			"destroy",
+			"out",
+		},
+	}
+)
+
+type WorkspaceFlags struct {
+	Flags []string
+}
+
+func (w WorkspaceFlags) Get(cmd *cobra.Command, args []string, flag string) (interface{}, error) {
+	switch flag {
+	case "path":
+		return cmd.Flags().GetString("path")
+	case "branch":
+		if cmd.Use == "plan" {
+			return cmd.Flags().GetString("branch")
+		} else {
+			return "", nil
+		}
+	case "local":
+		return cmd.Flags().GetBool("local")
+	case "source":
+		return cmd.Flags().GetString("source")
+	case "out":
+		return getOutPlan(cmd, args)
+	case "destroy":
+		destroy := false
+		if cmd.Use == "plan" {
+			return cmd.Flags().GetBool("destroy")
+		}
+		return destroy, nil
+	default:
+		return nil, fmt.Errorf("unsupported flag %s", flag)
+	}
+}
+
 func NewWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "workspace",
@@ -46,47 +90,26 @@ func getOutPlan(cmd *cobra.Command, args []string) (string, error) {
 }
 
 func getExecutionInput(cmd *cobra.Command, args []string) (*workspaces.WorkspaceExecutionInput, error) {
-	workspacePath, err := cmd.Flags().GetString("path")
-	if err != nil {
-		return nil, err
-	}
-	workspaceBranch, err := cmd.Flags().GetString("branch")
-	if err != nil {
-		return nil, err
-	}
-	local, err := cmd.Flags().GetBool("local")
-	if err != nil {
-		return nil, err
-	}
-	localModules, err := cmd.Flags().GetString("source")
-	if err != nil {
-		return nil, err
-	}
-
-	outPlan, err := getOutPlan(cmd, args)
-	if err != nil {
-		return nil, err
-	}
-
-	destroy := false
-	if cmd.Use == "plan" {
-		destroy, err = cmd.Flags().GetBool("destroy")
+	inputConfig := make(map[string]interface{})
+	var err error
+	for _, flag := range workspaceFlags.Flags {
+		inputConfig[flag], err = workspaceFlags.Get(cmd, args, flag)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	input := &workspaces.WorkspaceExecutionInput{
-		DestroyPlan:      destroy,
-		OutPlan:          outPlan,
-		Path:             workspacePath,
-		Branch:           workspaceBranch,
+		DestroyPlan:      inputConfig["destroy"].(bool),
+		OutPlan:          inputConfig["out"].(string),
+		Path:             inputConfig["path"].(string),
+		Branch:           inputConfig["branch"].(string),
 		Arn:              config.Configuration.GetString("plan_sfn_arn"),
 		ExecutionTimeout: config.Configuration.GetDuration("sfn_execution_timeout"),
 		RefreshRate:      config.Configuration.GetDuration("refresh_rate"),
 		IsCi:             config.Configuration.GetBool("ci_mode"),
-		Local:            local,
-		LocalModules:     localModules,
+		Local:            inputConfig["local"].(bool),
+		LocalModules:     inputConfig["source"].(string),
 	}
 
 	return input, nil
