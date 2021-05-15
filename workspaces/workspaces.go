@@ -99,20 +99,13 @@ func ExecuteRemoteWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, o
 		return err
 	}
 
-	executionStatus, err := aws.MonitorStateMachineStatus(executionArn,
+	fmt.Fprintf(out, "execution %s started\n", executionArn)
+
+	err = aws.MonitorStateMachineStatus(executionArn,
 		executionInput.RefreshRate,
 		executionInput.ExecutionTimeout,
 		executionInput.IsCi, out, outErr)
 	if err != nil {
-		return err
-	}
-
-	logInformation, err := aws.GetCloudwatchLogsReference(executionStatus)
-	if err != nil {
-		return err
-	}
-
-	if err := aws.StreamCloudwatchLogs(out, logInformation.Build.Logs.GroupName, logInformation.Build.Logs.StreamName); err != nil {
 		return err
 	}
 	return nil

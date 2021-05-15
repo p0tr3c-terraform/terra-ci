@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"regexp"
+	"sync"
 	"text/template"
 	"time"
 
@@ -18,7 +20,16 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs/cloudwatchlogsiface"
 	"github.com/aws/aws-sdk-go/service/sfn"
 	"github.com/aws/aws-sdk-go/service/sfn/sfniface"
-	"github.com/briandowns/spinner"
+	_ "github.com/briandowns/spinner"
+)
+
+var (
+	SfnExitEvents = map[string]bool{
+		"ExecutionSucceeded": true,
+		"ExecutionTimedOut":  true,
+		"ExecutionFailed":    true,
+		"ExecutionAborted":   true,
+	}
 )
 
 type InternalError string
@@ -46,6 +57,7 @@ type ExecutionOutput struct {
 }
 
 type ExecutionOutputBuild struct {
+	Arn  string                   `json:"Arn"`
 	Logs ExecutionOutputBuildLogs `json:"Logs"`
 }
 
@@ -99,70 +111,120 @@ func StartStateMachine(target, stateMachineArn, branch, action string) (string, 
 	return *executionOutput.ExecutionArn, nil
 }
 
-func MonitorStateMachineStatus(arn string, refreshRate, executionTimeout time.Duration, isCi bool, out, outErr io.Writer) (*sfn.DescribeExecutionOutput, error) {
+func processEvents(events *ExecutionEventHistory, executionHistory *sfn.GetExecutionHistoryOutput, out io.Writer) (*ExecutionEventHistory, bool) {
+	completed := false
+	for _, event := range executionHistory.Events {
+		if _, ok := events.Events[*event.Id]; ok {
+			continue
+		}
+		var logInformation ExecutionOutput
+		switch *event.Type {
+		case "ExecutionStarted":
+		case "TaskStateEntered":
+			fmt.Fprintf(out, "waiting for %s task to complete...\n", *event.StateEnteredEventDetails.Name)
+		case "TaskSubmitted":
+		case "TaskSubmitFailed":
+		case "TaskScheduled":
+		case "TaskStarted":
+		case "TaskStartFailed":
+		case "TaskFailed":
+		case "TaskSucceeded":
+		case "TaskTimedOut":
+		case "TaskStateAborted":
+		case "TaskStateExited":
+			if err := json.Unmarshal([]byte(*event.StateExitedEventDetails.Output), &logInformation); err != nil {
+				fmt.Fprintf(out, "faild to get details: %s\n", err.Error())
+			}
+			if err := StreamCloudwatchLogs(out, logInformation.Build.Logs.GroupName, logInformation.Build.Logs.StreamName, false); err != nil {
+				fmt.Fprintf(out, "failed to stream logs for %s:%s\n", logInformation.Build.Logs.GroupName, logInformation.Build.Logs.StreamName)
+			}
+			fmt.Fprintf(out, "task %s completed\n", *event.StateExitedEventDetails.Name)
+		case "ParallelStateStarted":
+		case "ChoiceStateEntered":
+		case "FailStateEntered":
+		case "MapStateEntered":
+		case "PassStateEntered":
+		case "SucceedStateEntered":
+		case "WaitStateEntered":
+		case "ExecutionSucceeded":
+			completed = true
+		case "ExecutionTimedOut":
+			completed = true
+		case "ExecutionFailed":
+			completed = true
+		case "ExecutionAborted":
+			completed = true
+		}
+		events.AddEvent(event)
+	}
+	return events, completed
+}
+
+type ExecutionEventHistory struct {
+	Events      map[int64]*sfn.HistoryEvent
+	LastEventId int64
+}
+
+func (e *ExecutionEventHistory) AddEvent(event *sfn.HistoryEvent) {
+	e.Events[*event.Id] = event
+	e.LastEventId = *event.Id
+}
+
+func returnExecutionStatus(events *ExecutionEventHistory) error {
+	completionStatus := *events.Events[events.LastEventId].Type
+	if completionStatus != "ExecutionSucceeded" {
+		return fmt.Errorf("execution completed with %s status", completionStatus)
+	}
+	return nil
+}
+
+func MonitorStateMachineStatus(arn string, refreshRate, executionTimeout time.Duration, isCi bool, out, outErr io.Writer) error {
 	sess := session.Must(session.NewSession(&aws.Config{}))
+	var wg sync.WaitGroup
 
 	sfnClient := Sfn{
 		Client: sfn.New(sess),
 	}
 
-	describeInput := &sfn.DescribeExecutionInput{
-		ExecutionArn: aws.String(arn),
-	}
-	executionStatusChan := make(chan *sfn.DescribeExecutionOutput, 1)
-
 	d := time.Now().Add(executionTimeout * time.Minute)
 	ctx, cancel := context.WithDeadline(context.Background(), d)
 	defer cancel()
 
-	go func(ctx context.Context, outputChan chan *sfn.DescribeExecutionOutput) {
-		fmt.Fprintf(out, "waiting for state machine to complete...\n")
-		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
-		if !isCi {
-			s.Start()
-			defer s.Stop()
+	wg.Add(1)
+	// Process state machine events
+	events := &ExecutionEventHistory{
+		Events: make(map[int64]*sfn.HistoryEvent),
+	}
+	go func(ctx context.Context) {
+		defer wg.Done()
+		completed := false
+		fmt.Fprintf(out, "monitoring execution of %s\n", arn)
+		executionEventInput := &sfn.GetExecutionHistoryInput{
+			ExecutionArn: aws.String(arn),
 		}
-
 		for {
+			executionEvents, err := sfnClient.Client.GetExecutionHistory(executionEventInput)
+			if err != nil {
+				return
+			}
+			events, completed = processEvents(events, executionEvents, out)
+			executionEventInput.NextToken = executionEvents.NextToken
+			if completed {
+				break
+			}
+
 			select {
 			case <-ctx.Done():
-				fmt.Fprintf(outErr, "CLI execution timeout reached\n")
-				outputChan <- nil
 				return
 			default:
-			}
-			executionStatus, err := sfnClient.Client.DescribeExecution(describeInput)
-			if err != nil {
-				fmt.Fprintf(outErr, "failed to describe execution status\n")
-				fmt.Fprintf(outErr, "%s\n", err)
-				outputChan <- nil
-				return
-			}
-			if !isCi {
-				s.Suffix = fmt.Sprintf("  current state: %s", *executionStatus.Status)
-			} else {
-				fmt.Fprintf(out, "current state: %s\n", *executionStatus.Status)
-			}
-			switch *executionStatus.Status {
-			case "SUCCEEDED":
-				outputChan <- executionStatus
-				return
-			case "RUNNING":
 				time.Sleep(time.Second * refreshRate)
-			default:
-				fmt.Fprintf(outErr, "execution failed\n")
-				fmt.Fprintf(outErr, "%s\n", *executionStatus.Status)
-				outputChan <- nil
-				return
 			}
 		}
-	}(ctx, executionStatusChan)
+		fmt.Fprintf(out, "execution of state machine completed\n")
+	}(ctx)
 
-	executionStatus := <-executionStatusChan
-	if executionStatus == nil {
-		return nil, InternalError("state machine execution failed")
-	}
-	return executionStatus, nil
+	wg.Wait()
+	return returnExecutionStatus(events)
 }
 
 func GetCloudwatchLogsReference(executionStatus *sfn.DescribeExecutionOutput) (*ExecutionOutput, error) {
@@ -173,7 +235,7 @@ func GetCloudwatchLogsReference(executionStatus *sfn.DescribeExecutionOutput) (*
 	return &logInformation, nil
 }
 
-func StreamCloudwatchLogs(out io.Writer, groupName, streamName string) error {
+func StreamCloudwatchLogs(out io.Writer, groupName, streamName string, verbose bool) error {
 	sess := session.Must(session.NewSession(&aws.Config{}))
 
 	cloudwatchClient := Cloudwatch{
@@ -188,13 +250,23 @@ func StreamCloudwatchLogs(out io.Writer, groupName, streamName string) error {
 	if err != nil {
 		return err
 	}
-	for _, event := range resp.Events {
-		fmt.Fprintf(out, "  %s", *event.Message)
-	}
 
 	gotToken := *resp.NextForwardToken
-
+	excludeInternalLogsPattern, err := regexp.Compile(`^\[Container\]`)
+	if err != nil {
+		return err
+	}
 	for {
+		for _, event := range resp.Events {
+			if !verbose {
+				matched := excludeInternalLogsPattern.MatchString(*event.Message)
+				if matched {
+					continue
+				}
+			}
+			fmt.Fprintf(out, "%s", *event.Message)
+		}
+
 		resp, err = cloudwatchClient.Client.GetLogEvents(&cloudwatchlogs.GetLogEventsInput{
 			LogGroupName:  aws.String(groupName),
 			LogStreamName: aws.String(streamName),
@@ -207,9 +279,7 @@ func StreamCloudwatchLogs(out io.Writer, groupName, streamName string) error {
 		if gotToken == *resp.NextForwardToken {
 			break
 		}
-		for _, event := range resp.Events {
-			fmt.Fprintf(out, "  %s", *event.Message)
-		}
+
 		gotToken = *resp.NextForwardToken
 	}
 	return nil
