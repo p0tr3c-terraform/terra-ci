@@ -218,6 +218,7 @@ func MonitorStateMachineStatus(arn string, refreshRate, executionTimeout time.Du
 			}
 			select {
 			case <-ctx.Done():
+				fmt.Fprintf(out, "cli execution timed out\n")
 				return
 			default:
 				time.Sleep(time.Second * refreshRate)
