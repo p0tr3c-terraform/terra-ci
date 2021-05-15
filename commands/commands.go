@@ -40,11 +40,12 @@ func NewTerraCICommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	config.AddConfigFlags(command)
 
 	// Subcommands
-	command.AddCommand(NewCreateCommand(in, out, outErr))
-	command.AddCommand(NewConfigCommand(in, out, outErr))
+	command.AddCommand(NewWorkspaceCommand(in, out, outErr))
+	// command.AddCommand(NewCreateCommand(in, out, outErr))
+	// command.AddCommand(NewConfigCommand(in, out, outErr))
 
-	command.AddCommand(NewPlanCommand(in, out, outErr))
-	command.AddCommand(NewApplyCommand(in, out, outErr))
+	// command.AddCommand(NewPlanCommand(in, out, outErr))
+	// command.AddCommand(NewApplyCommand(in, out, outErr))
 	return command
 }
 
