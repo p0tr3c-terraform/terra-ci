@@ -136,13 +136,15 @@ func ExecuteLocalWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, in
 	if executionInput.DestroyPlan {
 		shellCommandArgs = append(shellCommandArgs, "-destroy")
 	}
+	if executionInput.IsCi && executionInput.Action == "apply" {
+		shellCommandArgs = append(shellCommandArgs, "-auto-approve")
+	}
 	if executionInput.LocalModules != "" {
 		shellCommandArgs = append(shellCommandArgs, []string{
 			"--terragrunt-source",
 			executionInput.LocalModules,
 		}...)
 	}
-	fmt.Fprintf(out, "%v\n", shellCommandArgs)
 	shellCommand := exec.Command("terragrunt", shellCommandArgs...)
 	workspaceAbsPath, err := filepath.Abs(executionInput.Path)
 	if err != nil {
