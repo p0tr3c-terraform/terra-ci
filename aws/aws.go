@@ -126,6 +126,13 @@ func processEvents(events *ExecutionEventHistory, executionHistory *sfn.GetExecu
 		case "TaskStarted":
 		case "TaskStartFailed":
 		case "TaskFailed":
+			if err := json.Unmarshal([]byte(*event.TaskFailedEventDetails.Cause), &logInformation); err != nil {
+				fmt.Fprintf(out, "faild to get details: %s\n", err.Error())
+			}
+			if err := StreamCloudwatchLogs(out, logInformation.Build.Logs.GroupName, logInformation.Build.Logs.StreamName, false); err != nil {
+				fmt.Fprintf(out, "failed to stream logs for %s:%s\n", logInformation.Build.Logs.GroupName, logInformation.Build.Logs.StreamName)
+			}
+			fmt.Fprintf(out, "task failed\n")
 		case "TaskSucceeded":
 		case "TaskTimedOut":
 		case "TaskStateAborted":

@@ -96,6 +96,17 @@ func getOutPlan(cmd *cobra.Command, args []string) (string, error) {
 	return outPlan, err
 }
 
+func getExecutionArn(cmd *cobra.Command, args []string) string {
+	switch cmd.Use {
+	case "apply":
+		return config.Configuration.GetString("apply_sfn_arn")
+	case "plan":
+		return config.Configuration.GetString("plan_sfn_arn")
+	default:
+		return ""
+	}
+}
+
 func getExecutionInput(cmd *cobra.Command, args []string) (*workspaces.WorkspaceExecutionInput, error) {
 	inputConfig := make(map[string]interface{})
 	var err error
@@ -112,7 +123,7 @@ func getExecutionInput(cmd *cobra.Command, args []string) (*workspaces.Workspace
 		OutPlan:             inputConfig["out"].(string),
 		Path:                inputConfig["path"].(string),
 		Branch:              inputConfig["branch"].(string),
-		Arn:                 config.Configuration.GetString("plan_sfn_arn"),
+		Arn:                 getExecutionArn(cmd, args),
 		ExecutionTimeout:    config.Configuration.GetDuration("sfn_execution_timeout"),
 		RefreshRate:         config.Configuration.GetDuration("refresh_rate"),
 		IsCi:                config.Configuration.GetBool("ci_mode"),
