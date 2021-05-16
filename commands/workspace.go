@@ -20,6 +20,7 @@ var (
 			"branch",
 			"destroy",
 			"out",
+			"no-refresh",
 		},
 	}
 )
@@ -50,6 +51,12 @@ func (w WorkspaceFlags) Get(cmd *cobra.Command, args []string, flag string) (int
 			return cmd.Flags().GetBool("destroy")
 		}
 		return destroy, nil
+	case "no-refresh":
+		noRefresh := false
+		if cmd.Use == "plan" {
+			return cmd.Flags().GetBool("no-refresh")
+		}
+		return noRefresh, nil
 	default:
 		return nil, fmt.Errorf("unsupported flag %s", flag)
 	}
@@ -100,16 +107,17 @@ func getExecutionInput(cmd *cobra.Command, args []string) (*workspaces.Workspace
 	}
 
 	input := &workspaces.WorkspaceExecutionInput{
-		DestroyPlan:      inputConfig["destroy"].(bool),
-		OutPlan:          inputConfig["out"].(string),
-		Path:             inputConfig["path"].(string),
-		Branch:           inputConfig["branch"].(string),
-		Arn:              config.Configuration.GetString("plan_sfn_arn"),
-		ExecutionTimeout: config.Configuration.GetDuration("sfn_execution_timeout"),
-		RefreshRate:      config.Configuration.GetDuration("refresh_rate"),
-		IsCi:             config.Configuration.GetBool("ci_mode"),
-		Local:            inputConfig["local"].(bool),
-		LocalModules:     inputConfig["source"].(string),
+		DestroyPlan:         inputConfig["destroy"].(bool),
+		DisableRefreshState: inputConfig["no-refresh"].(bool),
+		OutPlan:             inputConfig["out"].(string),
+		Path:                inputConfig["path"].(string),
+		Branch:              inputConfig["branch"].(string),
+		Arn:                 config.Configuration.GetString("plan_sfn_arn"),
+		ExecutionTimeout:    config.Configuration.GetDuration("sfn_execution_timeout"),
+		RefreshRate:         config.Configuration.GetDuration("refresh_rate"),
+		IsCi:                config.Configuration.GetBool("ci_mode"),
+		Local:               inputConfig["local"].(bool),
+		LocalModules:        inputConfig["source"].(string),
 	}
 
 	return input, nil
@@ -119,14 +127,16 @@ func getExecutionInput(cmd *cobra.Command, args []string) (*workspaces.Workspace
 
 func NewWorkspacePlanCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	command := &cobra.Command{
-		Use:   "plan",
-		Short: "Run terraform plan on workspace",
-		RunE:  runWorkspacePlan,
+		Use:          "plan",
+		Short:        "Run terraform plan on workspace",
+		RunE:         runWorkspacePlan,
+		SilenceUsage: true,
 	}
 	SetCommandBuffers(command, in, out, outErr)
 	command.Flags().String("branch", "main", "Branch to execute workspace action")
 	command.Flags().String("out", "", "Name of plan file to generate")
 	command.Flags().Bool("destroy", false, "Generate destroy plan")
+	command.Flags().Bool("no-refresh", false, "Disable state synchronization")
 	return command
 }
 
@@ -155,9 +165,10 @@ func runWorkspacePlan(cmd *cobra.Command, args []string) error {
 
 func NewWorkspaceApplyCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	command := &cobra.Command{
-		Use:   "apply",
-		Short: "Run terraform apply on workspace",
-		RunE:  runWorkspaceApply,
+		Use:          "apply",
+		Short:        "Run terraform apply on workspace",
+		RunE:         runWorkspaceApply,
+		SilenceUsage: true,
 	}
 	SetCommandBuffers(command, in, out, outErr)
 	return command

@@ -82,17 +82,18 @@ func CreateWorkspaceCI(name, workspacePath, branch, arn, ciPath string) error {
 }
 
 type WorkspaceExecutionInput struct {
-	DestroyPlan      bool
-	OutPlan          string
-	Path             string
-	Branch           string
-	Action           string
-	Arn              string
-	ExecutionTimeout time.Duration
-	RefreshRate      time.Duration
-	IsCi             bool
-	Local            bool
-	LocalModules     string
+	DestroyPlan         bool
+	DisableRefreshState bool
+	OutPlan             string
+	Path                string
+	Branch              string
+	Action              string
+	Arn                 string
+	ExecutionTimeout    time.Duration
+	RefreshRate         time.Duration
+	IsCi                bool
+	Local               bool
+	LocalModules        string
 }
 
 func ExecuteRemoteWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, out, outErr io.Writer) error {
@@ -136,7 +137,10 @@ func ExecuteLocalWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, in
 	if executionInput.DestroyPlan {
 		shellCommandArgs = append(shellCommandArgs, "-destroy")
 	}
-	if executionInput.IsCi && executionInput.Action == "apply" {
+	if executionInput.DisableRefreshState && executionInput.Action == "plan" {
+		shellCommandArgs = append(shellCommandArgs, "-refresh=false")
+	}
+	if executionInput.IsCi && executionInput.Action == "apply" && executionInput.OutPlan == "" {
 		shellCommandArgs = append(shellCommandArgs, "-auto-approve")
 	}
 	if executionInput.LocalModules != "" {
