@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"time"
+
+	"github.com/p0tr3c/terra-ci/aws"
 )
 
 type ModuleExecutionInput struct {
@@ -50,13 +52,36 @@ func ExecuteLocalModuleWithOutput(executionInput *ModuleExecutionInput, in io.Re
 	return nil
 }
 
+func ExecuteRemoteModuleWithOutput(executionInput *ModuleExecutionInput, out, outErr io.Writer) error {
+	executionArn, err := aws.StartStateMachine(executionInput.Path,
+		executionInput.Arn,
+		executionInput.Branch,
+		executionInput.Action)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(out, "execution %s started\n", executionArn)
+
+	err = aws.MonitorStateMachineStatus(executionArn,
+		executionInput.RefreshRate,
+		executionInput.ExecutionTimeout,
+		executionInput.IsCi, out, outErr)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func ExecuteModuleWithOutput(executionInput *ModuleExecutionInput, in io.Reader, out, outErr io.Writer) error {
 	if executionInput.Local {
 		if err := ExecuteLocalModuleWithOutput(executionInput, in, out, outErr); err != nil {
 			return err
 		}
 	} else {
-		fmt.Fprintf(out, "remote module execution not supported\n")
+		if err := ExecuteRemoteModuleWithOutput(executionInput, out, outErr); err != nil {
+			return err
+		}
 	}
 	return nil
 }

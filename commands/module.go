@@ -71,7 +71,7 @@ func getModuleExecutionInput(cmd *cobra.Command, args []string) (*modules.Module
 	input := &modules.ModuleExecutionInput{
 		Path:             inputConfig["path"].(string),
 		Branch:           inputConfig["branch"].(string),
-		Arn:              getExecutionArn(cmd, args),
+		Arn:              config.Configuration.GetString("sfn_test_arn"),
 		ExecutionTimeout: config.Configuration.GetDuration("sfn_execution_timeout"),
 		RefreshRate:      config.Configuration.GetDuration("refresh_rate"),
 		IsCi:             config.Configuration.GetBool("ci_mode"),
