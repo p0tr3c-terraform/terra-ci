@@ -16,6 +16,7 @@ var (
 	DefaultCiDirectory         = ".github/workflows/"
 	StateMachineArn            = ""
 	PlanStateMachineArn        = ""
+	TestStateMachineArn        = ""
 	SfnExecutionTimeout        = 30
 	RefreshRate                = 15
 	CiMode                     = false
@@ -40,6 +41,7 @@ func init() {
 	Configuration.SetDefault("refresh_rate", RefreshRate)
 	Configuration.SetDefault("experimental_flow", ExperimentalFlow)
 	Configuration.SetDefault("plan_sfn_arn", PlanStateMachineArn)
+	Configuration.SetDefault("test_sfn_arn", TestStateMachineArn)
 }
 
 func AddConfigFlags(cmd *cobra.Command) {
