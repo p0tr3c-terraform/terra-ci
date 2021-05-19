@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 
 	"github.com/p0tr3c/terra-ci/config"
 	"github.com/p0tr3c/terra-ci/logs"
@@ -21,6 +22,7 @@ var (
 			"destroy",
 			"out",
 			"no-refresh",
+			"ci-path",
 		},
 	}
 )
@@ -34,7 +36,7 @@ func (w WorkspaceFlags) Get(cmd *cobra.Command, args []string, flag string) (int
 	case "path":
 		return cmd.Flags().GetString("path")
 	case "branch":
-		if cmd.Use == "plan" {
+		if cmd.Use == "plan" || cmd.Use == "create" {
 			return cmd.Flags().GetString("branch")
 		} else {
 			return "", nil
@@ -57,6 +59,11 @@ func (w WorkspaceFlags) Get(cmd *cobra.Command, args []string, flag string) (int
 			return cmd.Flags().GetBool("no-refresh")
 		}
 		return noRefresh, nil
+	case "ci-path":
+		if cmd.Use == "create" {
+			return cmd.Flags().GetString("ci-path")
+		}
+		return "", nil
 	default:
 		return nil, fmt.Errorf("unsupported flag %s", flag)
 	}
@@ -77,6 +84,7 @@ func NewWorkspaceCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 
 	command.AddCommand(NewWorkspacePlanCommand(in, out, outErr))
 	command.AddCommand(NewWorkspaceApplyCommand(in, out, outErr))
+	command.AddCommand(NewWorkspaceCreateCommand(in, out, outErr))
 	return command
 }
 
@@ -90,8 +98,6 @@ func getOutPlan(cmd *cobra.Command, args []string) (string, error) {
 		if len(args) == 1 {
 			outPlan = args[0]
 		}
-	default:
-		err = fmt.Errorf("unsupported command %s", cmd.Use)
 	}
 	return outPlan, err
 }
@@ -201,6 +207,63 @@ func runWorkspaceApply(cmd *cobra.Command, args []string) error {
 			"executionInput", executionInput,
 			"error", err)
 		cmd.PrintErrf("failed to execute workspace")
+		return err
+	}
+	return nil
+}
+
+/*************************** CREATE ***************************************/
+
+func NewWorkspaceCreateCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
+	command := &cobra.Command{
+		Use:   "create",
+		Short: "Creates new terragrunt workspace",
+		RunE:  runWorkspaceCreate,
+	}
+	SetCommandBuffers(command, in, out, outErr)
+
+	command.Flags().String("path", "", "Full path to the workspace")
+	command.MarkFlagRequired("path") //nolint
+	command.Flags().String("branch", "main", "Branch to execute workspace action")
+	command.Flags().String("ci-path", ".github/workflows", "Path to create github action")
+	return command
+}
+
+func getCreateInput(cmd *cobra.Command, args []string) (*workspaces.WorkspaceCreateInput, error) {
+	inputConfig := make(map[string]interface{})
+	var err error
+	for _, flag := range workspaceFlags.Flags {
+		inputConfig[flag], err = workspaceFlags.Get(cmd, args, flag)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	input := &workspaces.WorkspaceCreateInput{
+		Name:     filepath.Base(inputConfig["path"].(string)),
+		Path:     inputConfig["path"].(string),
+		Branch:   inputConfig["branch"].(string),
+		PlanArn:  config.Configuration.GetString("plan_sfn_arn"),
+		ApplyArn: config.Configuration.GetString("apply_sfn_arn"),
+		Module:   inputConfig["source"].(string),
+		CiPath:   inputConfig["ci-path"].(string),
+	}
+
+	return input, nil
+}
+
+func runWorkspaceCreate(cmd *cobra.Command, args []string) error {
+	createInput, err := getCreateInput(cmd, args)
+	if err != nil {
+		logs.Logger.Errorw("error while accessing flags",
+			"error", err)
+		cmd.PrintErrf("invalid create input")
+		return err
+	}
+	if err := workspaces.CreateWorkspace(createInput); err != nil {
+		logs.Logger.Errorw("failed to create workspace",
+			"error", err)
+		cmd.PrintErrf("failed to create workspace")
 		return err
 	}
 	return nil

@@ -5,43 +5,62 @@ const (
 inputs = {}
 
 terraform {
-  source = "{{ .ModuleLocation }}"
+  source = "{{ .Module }}"
 }
 
 include {
   path = find_in_parent_folders()
 }`
 	CiWorkspaceConfigTpl = `# Automatically generate by terra-ci
-name: Run - Terraform Plan for {{ .WorkspaceName }}
+name: Run - Terraform Plan for {{ .Name }}
 on:
   workflow_dispatch:
   push:
     branches-ignore:
-      - {{ .WorkspaceDefaultProdBranch }}
+      - {{ .Branch }}
     paths:
-      - {{ .WorkspacePath }}
+      - {{ .Path }}/**
 jobs:
   RunTerragruntPlan:
     runs-on: ubuntu-latest
     env:
-      TERRA_CI_STATE_MACHINE_ARN: "{{ .WorkspaceTerragruntRunnerARN }}"
+      TERRA_CI_WORKSPACE_PATH: {{ .Path }}
+      TERRA_CI_STATE_MACHINE_ARN: "{{ .PlanArn }}"
     steps:
       - uses: actions/checkout@v2
-      - run: gh release download --pattern terra-ci-linux-amd
-        env:
-          GH_TOKEN: ${{ ` + "`{{`" + ` }} secrets.PAT {{ ` + "`}}`" + ` }}
-          GH_REPO: github.com/p0tr3c-terraform/terra-ci
-      - run: chmod +x terra-ci-linux-amd
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '1.15.2'
+      - uses: ./.github/actions/terra-ci
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ ` + "`{{`" + ` }} secrets.AWS_ACCESS_KEY_ID {{ ` + "`}}`" + ` }}
           aws-secret-access-key: ${{ ` + "`{{`" + ` }} secrets.AWS_SECRET_ACCESS_KEY {{` + "`}}`" + ` }}
           aws-region: eu-west-1
+      - name: terragrunt plan
+        run: ./terra-ci-linux-amd workspace plan  --path={{ .Path }} --branch=${GITHUB_REF#refs/heads/}
+  RunTerragruntApply:
+    needs: RunTerragruntPlan
+    if: ${{ ` + "`{{`" + `}} github.ref == 'refs/heads/main' && github.event.inputs.plan_only == '' {{ ` + "`}}`" + `}}
+    runs-on: ubuntu-latest
+    env:
+      TERRA_CI_WORKSPACE_PATH: {{ .Path }}
+      TERRA_CI_STATE_MACHINE_ARN: "{{ .ApplyArn }}"
+    steps:
+      - uses: actions/checkout@v2
       - uses: actions/setup-go@v2
         with:
           go-version: '1.15.2'
-      - run: terra-ci run workspace  --path={{ .WorkspacePath }} --branch=${GITHUB_REF##*/}
+      - uses: ./.github/actions/terra-ci
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ ` + "`{{`" + ` }} secrets.AWS_ACCESS_KEY_ID {{ ` + "`}}`" + ` }}
+          aws-secret-access-key: ${{ ` + "`{{`" + ` }} secrets.AWS_SECRET_ACCESS_KEY {{` + "`}}`" + ` }}
+          aws-region: eu-west-1
+      - name: terragrunt apply
+        run: ./terra-ci-linux-amd  workspace apply --path=${TERRA_CI_WORKSPACE_PATH}
 `
 	StateMachineInputTpl = `
 {

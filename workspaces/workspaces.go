@@ -22,61 +22,68 @@ const (
 	defaultTerragruntConfigName = "terragrunt.hcl"
 )
 
-func CreateWorkspaceDirecotry(name, path string) error {
-	if err := os.MkdirAll(path, defaultDirectoryPermMode); err != nil {
+type WorkspaceCreateInput struct {
+	Name     string
+	Path     string
+	Module   string
+	Branch   string
+	PlanArn  string
+	ApplyArn string
+	CiPath   string
+}
+
+func CreateWorkspaceDirecotry(inputConfig *WorkspaceCreateInput) error {
+	if err := os.MkdirAll(inputConfig.Path, defaultDirectoryPermMode); err != nil {
 		return err
 	}
 	return nil
 }
 
-type TerragruntConfigParameters struct {
-	ModuleLocation string
-}
-
-type WorkspaceCIConfigParameters struct {
-	WorkspaceName                string
-	WorkspacePath                string
-	WorkspaceDefaultProdBranch   string
-	WorkspaceTerragruntRunnerARN string
-}
-
-func CreateWorkspaceConfig(workspacePath, modulePath string) error {
-	inputParams := &TerragruntConfigParameters{
-		ModuleLocation: modulePath,
-	}
+func CreateWorkspaceConfig(inputConfig *WorkspaceCreateInput) error {
 	tpl, err := template.New("terragruntConfig").Parse(templates.TerragruntWorkspaceConfig)
 	if err != nil {
 		return err
 	}
 	var templatedTerragruntConfig bytes.Buffer
-	if err := tpl.Execute(&templatedTerragruntConfig, inputParams); err != nil {
+	if err := tpl.Execute(&templatedTerragruntConfig, inputConfig); err != nil {
 		return err
 	}
-	if err := ioutil.WriteFile(filepath.Join(workspacePath, defaultTerragruntConfigName),
+	if err := ioutil.WriteFile(filepath.Join(inputConfig.Path, defaultTerragruntConfigName),
 		templatedTerragruntConfig.Bytes(), defaultFilePermMode); err != nil {
 		return err
 	}
 	return nil
 }
 
-func CreateWorkspaceCI(name, workspacePath, branch, arn, ciPath string) error {
-	ciInputParams := &WorkspaceCIConfigParameters{
-		WorkspaceName:                name,
-		WorkspacePath:                workspacePath,
-		WorkspaceDefaultProdBranch:   branch,
-		WorkspaceTerragruntRunnerARN: arn,
-	}
+func CreateWorkspaceCI(inputConfig *WorkspaceCreateInput) error {
 	tpl, err := template.New("ciConfig").Parse(templates.CiWorkspaceConfigTpl)
 	if err != nil {
 		return err
 	}
 	var templatedCiConfig bytes.Buffer
-	if err := tpl.Execute(&templatedCiConfig, ciInputParams); err != nil {
+	if err := tpl.Execute(&templatedCiConfig, inputConfig); err != nil {
 		return err
 	}
-	if err := ioutil.WriteFile(filepath.Join(ciPath, fmt.Sprintf("%s.yml", strings.ReplaceAll(workspacePath, "/", "_"))),
+	if err := ioutil.WriteFile(filepath.Join(inputConfig.CiPath, fmt.Sprintf("workspace_%s.yml", strings.Join(strings.Split(inputConfig.Path, "/")[1:], "_"))),
 		templatedCiConfig.Bytes(), defaultFilePermMode); err != nil {
 		return err
+	}
+	return nil
+}
+
+func CreateWorkspace(input *WorkspaceCreateInput) error {
+	if err := CreateWorkspaceDirecotry(input); err != nil {
+		return err
+	}
+
+	if err := CreateWorkspaceConfig(input); err != nil {
+		return err
+	}
+
+	if input.CiPath != "" {
+		if err := CreateWorkspaceCI(input); err != nil {
+			return err
+		}
 	}
 	return nil
 }

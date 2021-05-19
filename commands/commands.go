@@ -10,13 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var ()
-
-const ()
-
-func init() {
-}
-
 func NewDefaultTerraCICommand() *cobra.Command {
 	return NewTerraCICommand(os.Stdin, os.Stdout, os.Stderr)
 }
