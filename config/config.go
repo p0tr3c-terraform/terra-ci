@@ -21,6 +21,8 @@ var (
 	RefreshRate                = 15
 	CiMode                     = false
 	ExperimentalFlow           = false
+	RepositoryUrl              = ""
+	RepositoryName             = ""
 )
 
 func init() {
@@ -42,6 +44,8 @@ func init() {
 	Configuration.SetDefault("experimental_flow", ExperimentalFlow)
 	Configuration.SetDefault("plan_sfn_arn", PlanStateMachineArn)
 	Configuration.SetDefault("test_sfn_arn", TestStateMachineArn)
+	Configuration.SetDefault("repository_url", RepositoryUrl)
+	Configuration.SetDefault("repository_name", RepositoryName)
 }
 
 func AddConfigFlags(cmd *cobra.Command) {
@@ -65,6 +69,10 @@ func AddConfigFlags(cmd *cobra.Command) {
 	Configuration.BindPFlag("refresh_rate", cmd.PersistentFlags().Lookup("refresh-rate")) //nolint
 	cmd.PersistentFlags().BoolVarP(&ExperimentalFlow, "experimental-flow", "e", ExperimentalFlow, "Use experimental code flow. Assume broken")
 	Configuration.BindPFlag("experimental_flow", cmd.PersistentFlags().Lookup("experimental-flow")) //nolint
+	cmd.PersistentFlags().StringVarP(&RepositoryUrl, "repository-url", "", RepositoryUrl, "Github repository url to fetch on remote")
+	Configuration.BindPFlag("repository_url", cmd.PersistentFlags().Lookup("repository-url")) //nolint
+	cmd.PersistentFlags().StringVarP(&RepositoryName, "repository-name", "", RepositoryName, "Name of repository")
+	Configuration.BindPFlag("repository_name", cmd.PersistentFlags().Lookup("repository-name")) //nolint
 }
 
 func LoadConfig(cmd *cobra.Command) error {

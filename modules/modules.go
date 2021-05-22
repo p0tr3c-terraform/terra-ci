@@ -13,9 +13,13 @@ import (
 
 type ModuleExecutionInput struct {
 	Path             string
+	Source           string
+	Location         string
 	Branch           string
 	Action           string
 	Arn              string
+	Run              string
+	TestTimeout      string
 	ExecutionTimeout time.Duration
 	RefreshRate      time.Duration
 	IsCi             bool
@@ -26,6 +30,15 @@ type ModuleExecutionInput struct {
 func ExecuteLocalModuleWithOutput(executionInput *ModuleExecutionInput, in io.Reader, out, outErr io.Writer) error {
 	shellCommandArgs := []string{
 		executionInput.Action,
+		"-timeout",
+		executionInput.TestTimeout,
+		"-v",
+	}
+	if executionInput.Run != "" {
+		shellCommandArgs = append(shellCommandArgs, []string{
+			"-run",
+			executionInput.Run,
+		}...)
 	}
 	shellCommand := exec.Command("go", shellCommandArgs...)
 	shellCommand.Env = os.Environ()
@@ -55,7 +68,8 @@ func ExecuteLocalModuleWithOutput(executionInput *ModuleExecutionInput, in io.Re
 func ExecuteRemoteModuleWithOutput(executionInput *ModuleExecutionInput, out, outErr io.Writer) error {
 	executionArn, err := aws.StartStateMachine(executionInput.Path,
 		executionInput.Arn,
-		executionInput.Branch,
+		executionInput.Source,
+		executionInput.Location,
 		executionInput.Action)
 	if err != nil {
 		return err

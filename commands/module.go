@@ -18,6 +18,8 @@ var (
 			"local",
 			"branch",
 			"disable-cgo",
+			"timeout",
+			"run",
 		},
 	}
 )
@@ -36,6 +38,10 @@ func (w ModuleFlags) Get(cmd *cobra.Command, args []string, flag string) (interf
 		return cmd.Flags().GetBool("local")
 	case "disable-cgo":
 		return cmd.Flags().GetBool("disable-cgo")
+	case "timeout":
+		return cmd.Flags().GetString("timeout")
+	case "run":
+		return cmd.Flags().GetString("run")
 	default:
 		return nil, fmt.Errorf("unsupported flag %s", flag)
 	}
@@ -70,8 +76,12 @@ func getModuleExecutionInput(cmd *cobra.Command, args []string) (*modules.Module
 
 	input := &modules.ModuleExecutionInput{
 		Path:             inputConfig["path"].(string),
+		Source:           config.Configuration.GetString("repository_url"),
+		Location:         config.Configuration.GetString("repository_name"),
 		Branch:           inputConfig["branch"].(string),
 		Arn:              config.Configuration.GetString("test_sfn_arn"),
+		TestTimeout:      inputConfig["timeout"].(string),
+		Run:              inputConfig["run"].(string),
 		ExecutionTimeout: config.Configuration.GetDuration("sfn_execution_timeout"),
 		RefreshRate:      config.Configuration.GetDuration("refresh_rate"),
 		IsCi:             config.Configuration.GetBool("ci_mode"),
@@ -93,6 +103,8 @@ func NewModuleTestCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	}
 	SetCommandBuffers(command, in, out, outErr)
 	command.Flags().String("branch", "main", "Branch to execute module test on")
+	command.Flags().String("timeout", "5m", "Test timeout, default '5m'")
+	command.Flags().String("run", "", "Specific test to run")
 	return command
 }
 

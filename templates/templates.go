@@ -66,10 +66,11 @@ jobs:
 {
     "Comment": "Run from CLI",
     "build": {
-	  "sourceversion": "{{ .Branch }}",
 	  "action": "{{ .Action }}",
       "environment": {
-        "terra_ci_resource": "{{ .Resource }}"
+        "terra_ci_resource": "{{ .Resource }}",
+        "terra_ci_source": "{{ .RepositoryUrl }}",
+        "terra_ci_location": "{{ .RepositoryName }}"
       }
     }
 }

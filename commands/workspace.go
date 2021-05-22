@@ -129,6 +129,8 @@ func getExecutionInput(cmd *cobra.Command, args []string) (*workspaces.Workspace
 		OutPlan:             inputConfig["out"].(string),
 		Path:                inputConfig["path"].(string),
 		Branch:              inputConfig["branch"].(string),
+		Source:              config.Configuration.GetString("repository_url"),
+		Location:            config.Configuration.GetString("repository_name"),
 		Arn:                 getExecutionArn(cmd, args),
 		ExecutionTimeout:    config.Configuration.GetDuration("sfn_execution_timeout"),
 		RefreshRate:         config.Configuration.GetDuration("refresh_rate"),

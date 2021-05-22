@@ -94,6 +94,8 @@ type WorkspaceExecutionInput struct {
 	OutPlan             string
 	Path                string
 	Branch              string
+	Source              string
+	Location            string
 	Action              string
 	Arn                 string
 	ExecutionTimeout    time.Duration
@@ -106,7 +108,8 @@ type WorkspaceExecutionInput struct {
 func ExecuteRemoteWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, out, outErr io.Writer) error {
 	executionArn, err := aws.StartStateMachine(executionInput.Path,
 		executionInput.Arn,
-		executionInput.Branch,
+		executionInput.Source,
+		executionInput.Location,
 		executionInput.Action)
 	if err != nil {
 		return err

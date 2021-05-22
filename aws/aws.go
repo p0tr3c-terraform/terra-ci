@@ -45,9 +45,10 @@ type Cloudwatch struct {
 }
 
 type SfnInputParameters struct {
-	Resource string
-	Branch   string
-	Action   string
+	Resource       string
+	Action         string
+	RepositoryUrl  string
+	RepositoryName string
 }
 
 type ExecutionOutput struct {
@@ -76,7 +77,7 @@ func randSeq(n int) string {
 	return string(b)
 }
 
-func StartStateMachine(target, stateMachineArn, branch, action string) (string, error) {
+func StartStateMachine(target, stateMachineArn, repoUrl, repoName, action string) (string, error) {
 	sess := session.Must(session.NewSession(&aws.Config{}))
 
 	sfnClient := Sfn{
@@ -84,9 +85,10 @@ func StartStateMachine(target, stateMachineArn, branch, action string) (string, 
 	}
 
 	inputParams := &SfnInputParameters{
-		Resource: target,
-		Branch:   branch,
-		Action:   action,
+		Resource:       target,
+		Action:         action,
+		RepositoryUrl:  repoUrl,
+		RepositoryName: repoName,
 	}
 	tpl, err := template.New("executionInput").Parse(templates.StateMachineInputTpl)
 	if err != nil {
