@@ -110,6 +110,7 @@ func ExecuteRemoteWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, o
 		executionInput.Arn,
 		executionInput.Source,
 		executionInput.Location,
+		"",
 		executionInput.Action)
 	if err != nil {
 		return err

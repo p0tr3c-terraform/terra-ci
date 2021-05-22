@@ -49,6 +49,7 @@ type SfnInputParameters struct {
 	Action         string
 	RepositoryUrl  string
 	RepositoryName string
+	Run            string
 }
 
 type ExecutionOutput struct {
@@ -77,7 +78,7 @@ func randSeq(n int) string {
 	return string(b)
 }
 
-func StartStateMachine(target, stateMachineArn, repoUrl, repoName, action string) (string, error) {
+func StartStateMachine(target, stateMachineArn, repoUrl, repoName, run, action string) (string, error) {
 	sess := session.Must(session.NewSession(&aws.Config{}))
 
 	sfnClient := Sfn{
@@ -89,6 +90,7 @@ func StartStateMachine(target, stateMachineArn, repoUrl, repoName, action string
 		Action:         action,
 		RepositoryUrl:  repoUrl,
 		RepositoryName: repoName,
+		Run:            run,
 	}
 	tpl, err := template.New("executionInput").Parse(templates.StateMachineInputTpl)
 	if err != nil {

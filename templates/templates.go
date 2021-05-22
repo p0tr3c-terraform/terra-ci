@@ -70,7 +70,8 @@ jobs:
       "environment": {
         "terra_ci_resource": "{{ .Resource }}",
         "terra_ci_source": "{{ .RepositoryUrl }}",
-        "terra_ci_location": "{{ .RepositoryName }}"
+        "terra_ci_location": "{{ .RepositoryName }}",
+        "terra_ci_run": "{{ .Run }}"
       }
     }
 }

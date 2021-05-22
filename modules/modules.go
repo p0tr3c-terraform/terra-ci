@@ -70,6 +70,7 @@ func ExecuteRemoteModuleWithOutput(executionInput *ModuleExecutionInput, out, ou
 		executionInput.Arn,
 		executionInput.Source,
 		executionInput.Location,
+		executionInput.Run,
 		executionInput.Action)
 	if err != nil {
 		return err
