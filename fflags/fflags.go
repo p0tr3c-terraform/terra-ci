@@ -21,9 +21,10 @@ func IsPlanSplitEnabled() bool {
 
 func IsEnabled(flag string) bool {
 	ffe := os.Getenv(fmt.Sprintf("%s_%s", flagPrefix, flag))
-	if ff, ok := flags[flag]; !ok {
-		return false
+	// If hardcoded
+	if ff, ok := flags[flag]; ok {
+		return ff
 	} else {
-		return ffe != "" || ff
+		return ffe != ""
 	}
 }

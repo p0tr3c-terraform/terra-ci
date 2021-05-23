@@ -270,3 +270,20 @@ func runWorkspaceCreate(cmd *cobra.Command, args []string) error {
 	}
 	return nil
 }
+
+/*************************** FF SFN_MONITOR ***************************************/
+
+func NewWorkspaceWithMontiorCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
+	command := &cobra.Command{
+		Use:   "workspace",
+		Short: "Manage terraform workspace",
+		RunE:  workspaceMonitorPoC,
+	}
+	return command
+}
+
+func workspaceMonitorPoC(cmd *cobra.Command, args []string) error {
+	return nil
+}
+
+/*************************** FF SFN_MONITOR - END  ***************************************/

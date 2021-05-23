@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/p0tr3c/terra-ci/config"
+	"github.com/p0tr3c/terra-ci/fflags"
 	"github.com/p0tr3c/terra-ci/logs"
 
 	"github.com/spf13/cobra"
@@ -33,8 +34,12 @@ func NewTerraCICommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	config.AddConfigFlags(command)
 
 	// Subcommands
-	command.AddCommand(NewWorkspaceCommand(in, out, outErr))
-	command.AddCommand(NewModuleCommand(in, out, outErr))
+	if fflags.IsEnabled("SFN_MONITOR") {
+		command.AddCommand(NewWorkspaceWithMontiorCommand(in, out, outErr))
+	} else {
+		command.AddCommand(NewWorkspaceCommand(in, out, outErr))
+		command.AddCommand(NewModuleCommand(in, out, outErr))
+	}
 	return command
 }
 
