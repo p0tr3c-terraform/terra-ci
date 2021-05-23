@@ -193,3 +193,43 @@ func ExecuteWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, in io.R
 	}
 	return nil
 }
+
+/*************************** FF SFN_MONITOR ***************************************/
+
+func FFExecuteWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, in io.Reader, out, outErr io.Writer) error {
+	if executionInput.Local {
+		if err := ExecuteLocalWorkspaceWithOutput(executionInput, in, out, outErr); err != nil {
+			return err
+		}
+	} else {
+		if err := FFExecuteRemoteWorkspaceWithOutput(executionInput, out, outErr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func FFExecuteRemoteWorkspaceWithOutput(executionInput *WorkspaceExecutionInput, out, outErr io.Writer) error {
+	executionArn, err := aws.StartStateMachine(executionInput.Path,
+		executionInput.Arn,
+		executionInput.Source,
+		executionInput.Location,
+		"",
+		executionInput.Action)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(out, "execution %s started\n", executionArn)
+
+	err = aws.FFMonitorStateMachineStatus(executionArn,
+		executionInput.RefreshRate,
+		executionInput.ExecutionTimeout,
+		executionInput.IsCi, out, outErr)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+/*************************** FF SFN_MONITOR - END  ***************************************/

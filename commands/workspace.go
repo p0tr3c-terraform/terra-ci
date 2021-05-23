@@ -275,14 +275,43 @@ func runWorkspaceCreate(cmd *cobra.Command, args []string) error {
 
 func NewWorkspaceWithMontiorCommand(in io.Reader, out, outErr io.Writer) *cobra.Command {
 	command := &cobra.Command{
-		Use:   "workspace",
-		Short: "Manage terraform workspace",
-		RunE:  workspaceMonitorPoC,
+		Use:          "workspace",
+		Short:        "Manage terraform workspace",
+		RunE:         workspaceMonitorPoC,
+		SilenceUsage: true,
 	}
+	SetCommandBuffers(command, in, out, outErr)
+	command.PersistentFlags().String("path", "", "Full path to the workspace")
+	command.MarkFlagRequired("path") //nolint
+
+	command.PersistentFlags().Bool("local", false, "Run action with localy")
+	command.PersistentFlags().String("source", "", "Full path to local modules")
+	command.Flags().String("branch", "main", "Branch to execute workspace action")
+	command.Flags().String("out", "", "Name of plan file to generate")
+	command.Flags().Bool("destroy", false, "Generate destroy plan")
+	command.Flags().Bool("no-refresh", false, "Disable state synchronization")
 	return command
 }
 
 func workspaceMonitorPoC(cmd *cobra.Command, args []string) error {
+	executionInput, err := getExecutionInput(cmd, args)
+	if err != nil {
+		logs.Logger.Errorw("error while accessing flags",
+			"error", err)
+		cmd.PrintErrf("invalid execution input")
+		return err
+	}
+
+	executionInput.Arn = config.Configuration.GetString("plan_sfn_arn")
+	executionInput.Action = "plan"
+
+	if err := workspaces.FFExecuteWorkspaceWithOutput(executionInput, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.OutOrStderr()); err != nil {
+		logs.Logger.Errorw("failed to execute workspace",
+			"executionInput", executionInput,
+			"error", err)
+		cmd.PrintErrf("failed to execute workspace")
+		return err
+	}
 	return nil
 }
 
