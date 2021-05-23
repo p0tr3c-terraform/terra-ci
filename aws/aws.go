@@ -53,6 +53,10 @@ type SfnInputParameters struct {
 }
 
 type ExecutionOutput struct {
+	TaskResults TaskResultOutput `json:"taskresult"`
+}
+
+type TaskResultOutput struct {
 	Build ExecutionOutputBuild `json:"Build"`
 }
 
@@ -133,8 +137,9 @@ func processEvents(events *ExecutionEventHistory, executionHistory *sfn.GetExecu
 			if err := json.Unmarshal([]byte(*event.TaskFailedEventDetails.Cause), &logInformation); err != nil {
 				fmt.Fprintf(out, "faild to get details: %s\n", err.Error())
 			}
-			if err := StreamCloudwatchLogs(out, logInformation.Build.Logs.GroupName, logInformation.Build.Logs.StreamName, false); err != nil {
-				fmt.Fprintf(out, "failed to stream logs for %s:%s\n", logInformation.Build.Logs.GroupName, logInformation.Build.Logs.StreamName)
+			if err := StreamCloudwatchLogs(out, logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName, false); err != nil {
+				fmt.Fprintf(out, "failed to stream logs for %s:%s\n", logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName)
+				fmt.Fprintf(out, "error: %s\n", err.Error())
 			}
 			fmt.Fprintf(out, "task failed\n")
 		case "TaskSucceeded":
@@ -144,8 +149,9 @@ func processEvents(events *ExecutionEventHistory, executionHistory *sfn.GetExecu
 			if err := json.Unmarshal([]byte(*event.StateExitedEventDetails.Output), &logInformation); err != nil {
 				fmt.Fprintf(out, "faild to get details: %s\n", err.Error())
 			}
-			if err := StreamCloudwatchLogs(out, logInformation.Build.Logs.GroupName, logInformation.Build.Logs.StreamName, false); err != nil {
-				fmt.Fprintf(out, "failed to stream logs for %s:%s\n", logInformation.Build.Logs.GroupName, logInformation.Build.Logs.StreamName)
+			if err := StreamCloudwatchLogs(out, logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName, false); err != nil {
+				fmt.Fprintf(out, "failed to stream logs for %s:%s\n", logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName)
+				fmt.Fprintf(out, "error: %s\n", err.Error())
 			}
 			fmt.Fprintf(out, "task %s completed\n", *event.StateExitedEventDetails.Name)
 		case "ParallelStateStarted":
