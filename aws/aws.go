@@ -407,7 +407,6 @@ func (sm *StateMachineMonitor) WaitForExitEvent(ctx context.Context, cancel func
 	}
 
 	<-executionEventChan
-	return
 }
 
 func FFMonitorStateMachineStatus(arn string, refreshRate, executionTimeout time.Duration, isCi bool, out, outErr io.Writer) error {
@@ -457,42 +456,40 @@ func (sm *StateMachineMonitor) HandleTaskEvents() {
 		defer wg.Done()
 		var logInformation ExecutionOutput
 		for {
-			select {
-			case d, ok := <-ch:
-				// Subscribed channel was closed by publisher
-				if !ok {
-					return
+			d, ok := <-ch
+			// Subscribed channel was closed by publisher
+			if !ok {
+				return
+			}
+			switch *d.Type {
+			case "TaskStateEntered":
+				fmt.Fprintf(sm.Out, "waiting for %s task to complete...\n", *d.StateEnteredEventDetails.Name)
+			case "TaskSubmitted":
+			case "TaskSubmitFailed":
+			case "TaskScheduled":
+			case "TaskStarted":
+			case "TaskStateExited":
+				if err := json.Unmarshal([]byte(*d.StateExitedEventDetails.Output), &logInformation); err != nil {
+					fmt.Fprintf(sm.Out, "faild to get details: %s\n", err.Error())
 				}
-				switch *d.Type {
-				case "TaskStateEntered":
-					fmt.Fprintf(sm.Out, "waiting for %s task to complete...\n", *d.StateEnteredEventDetails.Name)
-				case "TaskSubmitted":
-				case "TaskSubmitFailed":
-				case "TaskScheduled":
-				case "TaskStarted":
-				case "TaskStateExited":
-					if err := json.Unmarshal([]byte(*d.StateExitedEventDetails.Output), &logInformation); err != nil {
-						fmt.Fprintf(sm.Out, "faild to get details: %s\n", err.Error())
-					}
-					if err := StreamCloudwatchLogs(sm.Out, logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName, false); err != nil {
-						fmt.Fprintf(sm.Out, "failed to stream logs for %s:%s\n", logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName)
-						fmt.Fprintf(sm.Out, "error: %s\n", err.Error())
-					}
-					return
-				case "TaskFailed":
-					if err := json.Unmarshal([]byte(*d.TaskFailedEventDetails.Cause), &logInformation); err != nil {
-						fmt.Fprintf(sm.Out, "faild to get details: %s\n", err.Error())
-					}
-					if err := StreamCloudwatchLogs(sm.Out, logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName, false); err != nil {
-						fmt.Fprintf(sm.Out, "failed to stream logs for %s:%s\n", logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName)
-						fmt.Fprintf(sm.Out, "error: %s\n", err.Error())
-					}
-					return
-				case "TaskSucceeded":
-				case "TaskTimedOut":
-				case "TaskStateAborted":
-				case "TaskStartFailed":
+				if err := StreamCloudwatchLogs(sm.Out, logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName, false); err != nil {
+					fmt.Fprintf(sm.Out, "failed to stream logs for %s:%s\n", logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName)
+					fmt.Fprintf(sm.Out, "error: %s\n", err.Error())
 				}
+				return
+			case "TaskFailed":
+				if err := json.Unmarshal([]byte(*d.TaskFailedEventDetails.Cause), &logInformation); err != nil {
+					fmt.Fprintf(sm.Out, "faild to get details: %s\n", err.Error())
+				}
+				if err := StreamCloudwatchLogs(sm.Out, logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName, false); err != nil {
+					fmt.Fprintf(sm.Out, "failed to stream logs for %s:%s\n", logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName)
+					fmt.Fprintf(sm.Out, "error: %s\n", err.Error())
+				}
+				return
+			case "TaskSucceeded":
+			case "TaskTimedOut":
+			case "TaskStateAborted":
+			case "TaskStartFailed":
 			}
 		}
 	}(taskEventChan)
@@ -502,7 +499,6 @@ func (sm *StateMachineMonitor) EventHistoryMonitor(ctx context.Context) {
 	executionEventInput := &sfn.GetExecutionHistoryInput{
 		ExecutionArn: aws.String(sm.Arn),
 	}
-	executionCompleted := false
 	for {
 		executionEvents, err := sm.Client.GetExecutionHistory(executionEventInput)
 		if err != nil {
@@ -518,13 +514,8 @@ func (sm *StateMachineMonitor) EventHistoryMonitor(ctx context.Context) {
 		}
 		select {
 		case <-ctx.Done():
-			// Give event loop last chance to fetch latest events
-			if executionCompleted {
-				sm.EventBus.Close()
-				return
-			} else {
-				executionCompleted = true
-			}
+			sm.EventBus.Close()
+			return
 		default:
 			time.Sleep(time.Second * sm.RefreshRate)
 		}

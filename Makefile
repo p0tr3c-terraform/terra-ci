@@ -1,7 +1,7 @@
 PROJECTNAME=$(shell basename "$(PWD)")
 RELEASE_DIR ?= _release/$(VERSION)
 
-GOLINT_VERSION="v1.34.1"
+GOLINT_VERSION="v1.40.1"
 
 MAKEFLAGS += --silent
 
