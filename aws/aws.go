@@ -319,36 +319,105 @@ func StreamCloudwatchLogs(out io.Writer, groupName, streamName string, verbose b
 
 /*************************** FF SFN_MONITOR ***************************************/
 
-func FFMonitorStateMachineStatus(arn string, refreshRate, executionTimeout time.Duration, isCi bool, out, outErr io.Writer) error {
-	sess := session.Must(session.NewSession(&aws.Config{}))
-	sfnClient := Sfn{
-		Client: sfn.New(sess),
+type StateMachineMonitor struct {
+	*Sfn
+	Arn              string
+	Out              io.Writer
+	OutErr           io.Writer
+	ExecutionTimeout time.Duration
+	RefreshRate      time.Duration
+	Ci               bool
+	*ExecutionEventHistory
+	EventBus *SfnEventBus
+	Workers  sync.WaitGroup
+}
+
+func (sm *StateMachineMonitor) WithOut(out io.Writer) *StateMachineMonitor {
+	sm.Out = out
+	return sm
+}
+
+func (sm *StateMachineMonitor) WithCi(ci bool) *StateMachineMonitor {
+	sm.Ci = ci
+	return sm
+}
+
+func (sm *StateMachineMonitor) WithTimeout(timeout time.Duration) *StateMachineMonitor {
+	sm.ExecutionTimeout = timeout
+	return sm
+}
+
+func (sm *StateMachineMonitor) WithRefreshRate(rate time.Duration) *StateMachineMonitor {
+	sm.RefreshRate = rate
+	return sm
+}
+
+func (sm *StateMachineMonitor) WithSfnClient(sfn *Sfn) *StateMachineMonitor {
+	sm.Sfn = sfn
+	return sm
+}
+
+func NewStateMachineMonitor(arn string) *StateMachineMonitor {
+	sm := &StateMachineMonitor{
+		Arn: arn,
 	}
-
-	d := time.Now().Add(executionTimeout * time.Minute)
-	ctx, cancel := context.WithDeadline(context.Background(), d)
-	defer cancel()
-
-	// Process state machine events
-	events := &ExecutionEventHistory{
+	sm.EventBus = &SfnEventBus{
+		subscribers: map[string]SfnEventChannelSlice{},
+	}
+	sm.ExecutionEventHistory = &ExecutionEventHistory{
 		Events: make(map[int64]*sfn.HistoryEvent),
 	}
-	monitorExitStatus := make(chan *ExecutionMonitorExitDetails)
+	return sm
+}
 
-	monitorInput := &ExecutionMonitorInput{
-		Client:      sfnClient,
-		Arn:         arn,
-		Events:      events,
-		RefreshRate: refreshRate,
-		Out:         out,
+func (sm *StateMachineMonitor) Run() error {
+	if sm.Sfn == nil {
+		sess := session.Must(session.NewSession(&aws.Config{}))
+		sm.Sfn = &Sfn{
+			Client: sfn.New(sess),
+		}
 	}
-	go EventHistoryMonitor(ctx, monitorInput, monitorExitStatus)
 
-	exitStatus := <-monitorExitStatus
-	if exitStatus.Error != nil {
-		return exitStatus.Error
+	d := time.Now().Add(sm.ExecutionTimeout * time.Minute)
+	ctx, cancel := context.WithDeadline(context.Background(), d) // cancel execution after timeout
+
+	go sm.EventHistoryMonitor(ctx)
+	go sm.WaitForExitEvent(ctx, cancel)
+
+	// Workers
+	sm.Workers.Add(1)
+	go sm.HandleTaskEvents()
+
+	sm.Workers.Wait()
+	return nil
+}
+
+func (sm *StateMachineMonitor) WaitForExitEvent(ctx context.Context, cancel func()) {
+	defer cancel()
+
+	executionEventChan := make(chan SfnEvent)
+	exitEvents := []string{
+		"ExecutionSucceeded",
+		"ExecutionTimedOut",
+		"ExecutionFailed",
+		"ExecutionAborted",
 	}
-	return returnExecutionStatus(events)
+	for _, event := range exitEvents {
+		sm.EventBus.Subscribe(event, executionEventChan)
+	}
+
+	<-executionEventChan
+	return
+}
+
+func FFMonitorStateMachineStatus(arn string, refreshRate, executionTimeout time.Duration, isCi bool, out, outErr io.Writer) error {
+	stateMachineMonitor := NewStateMachineMonitor(arn).
+		WithTimeout(executionTimeout).
+		WithRefreshRate(refreshRate).
+		WithOut(out).
+		WithCi(isCi)
+
+	return stateMachineMonitor.Run()
 }
 
 type ExecutionMonitorInput struct {
@@ -359,21 +428,29 @@ type ExecutionMonitorInput struct {
 	RefreshRate time.Duration
 }
 
-func NewTaskEventSubscriber(eb *SfnEventBus, out io.Writer, done *sync.WaitGroup) {
-	defer done.Done()
-	var wg sync.WaitGroup
+func (sm *StateMachineMonitor) HandleTaskEvents() {
+	defer sm.Workers.Done()
+
 	taskEventChan := make(chan SfnEvent)
-	eb.Subscribe("TaskStateEntered", taskEventChan)
-	eb.Subscribe("TaskSubmitted", taskEventChan)
-	eb.Subscribe("TaskSubmitFailed", taskEventChan)
-	eb.Subscribe("TaskScheduled", taskEventChan)
-	eb.Subscribe("TaskStarted", taskEventChan)
-	eb.Subscribe("TaskStartFailed", taskEventChan)
-	eb.Subscribe("TaskFailed", taskEventChan)
-	eb.Subscribe("TaskSucceeded", taskEventChan)
-	eb.Subscribe("TaskTimedOut", taskEventChan)
-	eb.Subscribe("TaskStateAborted", taskEventChan)
-	eb.Subscribe("TaskStateExited", taskEventChan)
+	taskEvents := []string{
+		"TaskStateEntered",
+		"TaskSubmitted",
+		"TaskSubmitFailed",
+		"TaskScheduled",
+		"TaskStarted",
+		"TaskStartFailed",
+		"TaskFailed",
+		"TaskSucceeded",
+		"TaskTimedOut",
+		"TaskStateAborted",
+		"TaskStateExited",
+	}
+	for _, event := range taskEvents {
+		sm.EventBus.Subscribe(event, taskEventChan)
+	}
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
 
 	wg.Add(1)
 	go func(ch chan SfnEvent) {
@@ -381,118 +458,81 @@ func NewTaskEventSubscriber(eb *SfnEventBus, out io.Writer, done *sync.WaitGroup
 		var logInformation ExecutionOutput
 		for {
 			select {
-			case d := <-ch:
-				fmt.Fprintf(out, "[SUBSCRIBER]Event: %s\n", *d.Data.Type)
-				switch *d.Data.Type {
+			case d, ok := <-ch:
+				// Subscribed channel was closed by publisher
+				if !ok {
+					return
+				}
+				switch *d.Type {
 				case "TaskStateEntered":
-					fmt.Fprintf(out, "waiting for %s task to complete...\n", *d.Data.StateEnteredEventDetails.Name)
+					fmt.Fprintf(sm.Out, "waiting for %s task to complete...\n", *d.StateEnteredEventDetails.Name)
 				case "TaskSubmitted":
 				case "TaskSubmitFailed":
 				case "TaskScheduled":
 				case "TaskStarted":
-				case "TaskStartFailed":
+				case "TaskStateExited":
+					if err := json.Unmarshal([]byte(*d.StateExitedEventDetails.Output), &logInformation); err != nil {
+						fmt.Fprintf(sm.Out, "faild to get details: %s\n", err.Error())
+					}
+					if err := StreamCloudwatchLogs(sm.Out, logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName, false); err != nil {
+						fmt.Fprintf(sm.Out, "failed to stream logs for %s:%s\n", logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName)
+						fmt.Fprintf(sm.Out, "error: %s\n", err.Error())
+					}
+					return
 				case "TaskFailed":
-					if err := json.Unmarshal([]byte(*d.Data.TaskFailedEventDetails.Cause), &logInformation); err != nil {
-						fmt.Fprintf(out, "faild to get details: %s\n", err.Error())
+					if err := json.Unmarshal([]byte(*d.TaskFailedEventDetails.Cause), &logInformation); err != nil {
+						fmt.Fprintf(sm.Out, "faild to get details: %s\n", err.Error())
 					}
-					if err := StreamCloudwatchLogs(out, logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName, false); err != nil {
-						fmt.Fprintf(out, "failed to stream logs for %s:%s\n", logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName)
-						fmt.Fprintf(out, "error: %s\n", err.Error())
+					if err := StreamCloudwatchLogs(sm.Out, logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName, false); err != nil {
+						fmt.Fprintf(sm.Out, "failed to stream logs for %s:%s\n", logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName)
+						fmt.Fprintf(sm.Out, "error: %s\n", err.Error())
 					}
-					fmt.Fprintf(out, "task failed\n")
 					return
 				case "TaskSucceeded":
 				case "TaskTimedOut":
 				case "TaskStateAborted":
-				case "TaskStateExited":
-					if err := json.Unmarshal([]byte(*d.Data.StateExitedEventDetails.Output), &logInformation); err != nil {
-						fmt.Fprintf(out, "faild to get details: %s\n", err.Error())
-					}
-					if err := StreamCloudwatchLogs(out, logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName, false); err != nil {
-						fmt.Fprintf(out, "failed to stream logs for %s:%s\n", logInformation.TaskResults.Build.Logs.GroupName, logInformation.TaskResults.Build.Logs.StreamName)
-						fmt.Fprintf(out, "error: %s\n", err.Error())
-					}
-					fmt.Fprintf(out, "task %s completed\n", *d.Data.StateExitedEventDetails.Name)
-					return
+				case "TaskStartFailed":
 				}
 			}
 		}
 	}(taskEventChan)
-	wg.Wait()
 }
 
-func EventHistoryMonitor(ctx context.Context, monitorInput *ExecutionMonitorInput, exitStatus chan *ExecutionMonitorExitDetails) {
-	completed := false
+func (sm *StateMachineMonitor) EventHistoryMonitor(ctx context.Context) {
 	executionEventInput := &sfn.GetExecutionHistoryInput{
-		ExecutionArn: aws.String(monitorInput.Arn),
+		ExecutionArn: aws.String(sm.Arn),
 	}
-	eb := &SfnEventBus{
-		subscribers: map[string]SfnEventChannelSlice{},
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go NewTaskEventSubscriber(eb, monitorInput.Out, &wg)
-
+	executionCompleted := false
 	for {
-		executionEvents, err := monitorInput.Client.Client.GetExecutionHistory(executionEventInput)
+		executionEvents, err := sm.Client.GetExecutionHistory(executionEventInput)
 		if err != nil {
-			exitStatus <- &ExecutionMonitorExitDetails{
-				Error: err,
-			}
 			return
 		}
-		monitorInput.Events, completed = FFprocessEvents(eb, monitorInput.Events, executionEvents, monitorInput.Out)
-		executionEventInput.NextToken = executionEvents.NextToken
-		if completed {
-			break
+		// TODO(p0tr3c): fix this to fetch next events if pagination token is set
+		for _, event := range executionEvents.Events {
+			if _, ok := sm.Events[*event.Id]; ok {
+				continue
+			}
+			sm.EventBus.Publish(*event.Type, SfnEvent{HistoryEvent: event})
+			sm.Events[*event.Id] = event
 		}
 		select {
 		case <-ctx.Done():
-			exitStatus <- &ExecutionMonitorExitDetails{
-				Error: fmt.Errorf("cli execution timed out"),
+			// Give event loop last chance to fetch latest events
+			if executionCompleted {
+				sm.EventBus.Close()
+				return
+			} else {
+				executionCompleted = true
 			}
-			return
 		default:
-			time.Sleep(time.Second * monitorInput.RefreshRate)
+			time.Sleep(time.Second * sm.RefreshRate)
 		}
 	}
-	wg.Wait()
-	exitStatus <- &ExecutionMonitorExitDetails{}
-}
-
-func FFprocessEvents(eb *SfnEventBus, events *ExecutionEventHistory, executionHistory *sfn.GetExecutionHistoryOutput, out io.Writer) (*ExecutionEventHistory, bool) {
-	completed := false
-	for _, event := range executionHistory.Events {
-		if _, ok := events.Events[*event.Id]; ok {
-			continue
-		}
-		eb.Publish(*event.Type, SfnEvent{Data: event})
-		switch *event.Type {
-		case "ExecutionStarted":
-		case "ParallelStateStarted":
-		case "ChoiceStateEntered":
-		case "FailStateEntered":
-		case "MapStateEntered":
-		case "PassStateEntered":
-		case "SucceedStateEntered":
-		case "WaitStateEntered":
-		case "ExecutionSucceeded":
-			completed = true
-		case "ExecutionTimedOut":
-			completed = true
-		case "ExecutionFailed":
-			completed = true
-		case "ExecutionAborted":
-			completed = true
-		}
-		events.AddEvent(event)
-	}
-	return events, completed
 }
 
 type SfnEvent struct {
-	Data *sfn.HistoryEvent
+	*sfn.HistoryEvent
 }
 
 type SfnEventChannel chan SfnEvent
@@ -525,6 +565,18 @@ func (eb *SfnEventBus) Publish(eventType string, data SfnEvent) {
 				ch <- data
 			}
 		}(data, channels)
+	}
+}
+
+func (eb *SfnEventBus) Close() {
+	closedChannels := make(map[SfnEventChannel]bool)
+	for _, subscribers := range eb.subscribers {
+		for _, subscriber := range subscribers {
+			if _, ok := closedChannels[subscriber]; !ok {
+				closedChannels[subscriber] = true
+				close(subscriber)
+			}
+		}
 	}
 }
 
